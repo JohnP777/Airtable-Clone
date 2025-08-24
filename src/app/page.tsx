@@ -13,7 +13,7 @@ export default async function Home() {
           </h2>
         </div>
         
-        <button className="rounded-lg bg-blue-600 px-8 py-4 text-xl font-semibold text-white hover:bg-blue-700 transition-colors">
+        <button className="rounded-lg bg-black px-8 py-4 text-xl font-semibold text-white hover:bg-gray-800 transition-colors">
           Build it now
         </button>
       </div>
