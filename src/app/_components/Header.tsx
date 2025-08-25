@@ -2,8 +2,11 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { signIn } from "next-auth/react";
 
 export function Header() {
+  const handleSignIn = () => signIn("google", { callbackUrl: window.location.href });
+
   return (
     <header className="w-full bg-[#f8f4ec] border-b-2 border-[#ebeee6]">
       <div className="mx-auto flex w-full items-center justify-between px-6 py-3">
@@ -21,9 +24,9 @@ export function Header() {
         </div>
 
         <div className="flex items-center gap-3">
-          <button className="rounded-lg border border-black bg-[#f8f4ec] px-4 py-2 text-sm font-semibold text-black transition-colors hover:text-blue-600">Book Demo</button>
-          <button className="rounded-lg bg-black px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-gray-800">Sign up for free</button>
-          <button className="text-sm font-semibold text-gray-900 transition-colors hover:text-blue-600">Log in</button>
+          <button onClick={handleSignIn} className="rounded-lg border border-black bg-[#f8f4ec] px-4 py-2 text-sm font-semibold text-black transition-colors hover:text-blue-600">Book Demo</button>
+          <button onClick={handleSignIn} className="rounded-lg bg-black px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-gray-800">Sign up for free</button>
+          <button onClick={handleSignIn} className="text-sm font-semibold text-gray-900 transition-colors hover:text-blue-600">Log in</button>
         </div>
       </div>
     </header>

@@ -1,6 +1,11 @@
+"use client";
+
 import React from "react";
+import { signIn } from "next-auth/react";
 
 export function Hero() {
+  const handleSignIn = () => signIn("google", { callbackUrl: window.location.href });
+
   return (
     <section className="w-full bg-transparent">
       <div className="mx-auto flex min-h-[56vh] max-w-[1120px] flex-col items-center justify-center px-4 py-12">
@@ -19,10 +24,10 @@ export function Hero() {
           </p>
 
           <div className="mt-5 flex items-center justify-between">
-            <button className="rounded-full border border-gray-300 bg-white px-4 py-2.5 text-xs font-medium text-gray-900 shadow-sm transition-colors hover:bg-gray-50">
+            <button onClick={handleSignIn} className="rounded-full border border-gray-300 bg-white px-4 py-2.5 text-xs font-medium text-gray-900 shadow-sm transition-colors hover:bg-gray-50">
               New Suggestion
             </button>
-            <button className="rounded-full bg-black px-5 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-gray-800">
+            <button onClick={handleSignIn} className="rounded-full bg-black px-5 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-gray-800">
               Build it now
             </button>
           </div>
