@@ -13,8 +13,7 @@ export function Sidebar() {
 
   return (
     <aside
-      className={`${isOpen ? "w-72" : "w-14"} fixed left-0` +
-        ` top-[${HEADER_HEIGHT}px] bottom-0 z-40 border-r-2 border-gray-200 bg-white/80 backdrop-blur-sm transition-all duration-200`}
+      className={`${isOpen ? "w-72" : "w-14"} fixed left-0 top-[48px] bottom-0 z-40 border-r-2 border-gray-200 bg-white/80 backdrop-blur-sm transition-all duration-200`}
       onMouseEnter={() => setIsHovering(true)}
       onMouseLeave={() => setIsHovering(false)}
       aria-label="Sidebar"
