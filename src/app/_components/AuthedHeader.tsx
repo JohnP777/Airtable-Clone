@@ -31,7 +31,7 @@ export function AuthedHeader() {
           </div>
 
           <Link href="/" aria-label="Home">
-            <Image src="/logo2.png" alt="Airtable" width={112} height={24} priority />
+            <Image src="/logo2.PNG" alt="Airtable" width={112} height={24} priority />
           </Link>
         </div>
 
