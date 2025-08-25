@@ -10,14 +10,11 @@ export function HomeContent() {
   return (
     <div className="min-h-screen bg-[#f9fafb] p-4">
       <div className={`${isPinnedOpen ? 'ml-72' : 'ml-14'} transition-all duration-200`}>
-        {/* Home Title */}
         <h1 className="mb-6 mt-4 text-2xl font-semibold text-gray-900" style={{ fontFamily: 'FF Zwo Pro Semi Bold, sans-serif' }}>
           Home
         </h1>
 
-        {/* Feature Boxes Grid - Always 4 columns */}
         <div className="grid grid-cols-4 gap-4 mb-8">
-          {/* Box 1: Start with Omni */}
           <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
             <div className="flex items-center gap-2 mb-2">
               <Image src="/1.PNG" alt="Omni" width={24} height={24} />
@@ -30,7 +27,6 @@ export function HomeContent() {
             </p>
           </div>
 
-          {/* Box 2: Start with templates */}
           <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
             <div className="flex items-center gap-2 mb-2">
               <Image src="/2.PNG" alt="Templates" width={24} height={24} />
@@ -43,7 +39,6 @@ export function HomeContent() {
             </p>
           </div>
 
-          {/* Box 3: Quickly upload */}
           <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
             <div className="flex items-center gap-2 mb-2">
               <Image src="/3.PNG" alt="Upload" width={24} height={24} />
@@ -56,7 +51,6 @@ export function HomeContent() {
             </p>
           </div>
 
-          {/* Box 4: Build an app on your own */}
           <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
             <div className="flex items-center gap-2 mb-2">
               <Image src="/4.PNG" alt="Build" width={24} height={24} />
@@ -70,7 +64,6 @@ export function HomeContent() {
           </div>
         </div>
 
-        {/* Recent Activity Section */}
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium text-gray-900">Opened anytime</span>
@@ -92,7 +85,6 @@ export function HomeContent() {
           </div>
         </div>
 
-        {/* Empty State */}
         <div className="text-center mt-32">
           <h2 className="mb-2 text-xl text-gray-900">You haven't opened anything recently</h2>
           <p className="mb-6 text-xs text-gray-600">Apps that you have recently opened will appear here.</p>

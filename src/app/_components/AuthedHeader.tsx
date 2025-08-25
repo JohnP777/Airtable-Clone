@@ -11,7 +11,6 @@ export function AuthedHeader() {
   return (
     <header className="relative z-50 w-full bg-white border-b border-gray-200 shadow-sm">
       <div className="mx-auto flex w-full h-12 items-center justify-between px-4">
-        {/* Left: Hamburger + Logo */}
         <div className="flex items-center gap-2">
           <div className="relative group z-50">
             <button
@@ -36,7 +35,6 @@ export function AuthedHeader() {
           </Link>
         </div>
 
-        {/* Center: Search */}
         <div className="flex-1 px-4">
           <div className="flex w-[23rem] items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-2 shadow-sm ml-[calc(50%-12.4rem)]">
             <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-500">
@@ -48,7 +46,6 @@ export function AuthedHeader() {
           </div>
         </div>
 
-        {/* Right: Actions (slightly larger) */}
         <div className="flex items-center gap-3">
           <button className="flex items-center gap-1 rounded px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100">
             <Image src="/questionmark.png" alt="Help" width={18} height={18} />
