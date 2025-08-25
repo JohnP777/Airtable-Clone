@@ -86,7 +86,7 @@ export function HomeContent() {
         </div>
 
         <div className="text-center mt-32">
-          <h2 className="mb-2 text-xl text-gray-900">You haven't opened anything recently</h2>
+          <h2 className="mb-2 text-xl text-gray-900">You haven&apos;t opened anything recently</h2>
           <p className="mb-6 text-xs text-gray-600">Apps that you have recently opened will appear here.</p>
           <button className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
             Go to all workspaces
