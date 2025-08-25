@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { useSidebar } from "./SidebarContext";
 
-const HEADER_HEIGHT = 48; 
+ 
 
 export function Sidebar() {
   const { isPinnedOpen } = useSidebar();

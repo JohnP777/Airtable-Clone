@@ -23,13 +23,13 @@ export function BaseCard({ base, onContextMenu }: BaseCardProps) {
   const utils = api.useUtils();
   const updateLastOpenedMutation = api.base.updateLastOpened.useMutation({
     onSuccess: () => {
-      utils.base.getRecent.invalidate();
+      void utils.base.getRecent.invalidate();
     },
   });
 
   const renameMutation = api.base.rename.useMutation({
     onSuccess: () => {
-      utils.base.getRecent.invalidate();
+      void utils.base.getRecent.invalidate();
       setIsRenaming(false);
     },
   });
@@ -38,14 +38,14 @@ export function BaseCard({ base, onContextMenu }: BaseCardProps) {
 
   const handleCardClick = () => {
     if (!isRenaming) {
-      updateLastOpenedMutation.mutate({ id: base.id });
+      void updateLastOpenedMutation.mutate({ id: base.id });
       router.push(`/base/${base.id}`);
     }
   };
 
   const handleRename = () => {
     if (newName.trim() && newName.trim() !== base.name) {
-      renameMutation.mutate({ id: base.id, name: newName.trim() });
+      void renameMutation.mutate({ id: base.id, name: newName.trim() });
     } else {
       setIsRenaming(false);
       setNewName(base.name);

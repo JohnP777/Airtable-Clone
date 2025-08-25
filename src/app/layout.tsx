@@ -5,9 +5,6 @@ import { Geist } from "next/font/google";
 
 import { TRPCReactProvider } from "An/trpc/react";
 import { Header } from "An/app/_components/Header";
-import { AuthedHeader } from "An/app/_components/AuthedHeader";
-import { Sidebar } from "An/app/_components/Sidebar";
-import { SidebarProvider } from "An/app/_components/SidebarContext";
 import { auth } from "An/server/auth";
 
 export const metadata: Metadata = {

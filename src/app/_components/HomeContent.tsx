@@ -29,14 +29,14 @@ export function HomeContent() {
   const createBaseMutation = api.base.create.useMutation({
     onSuccess: (base) => {
       // Invalidate and refetch recent bases
-      utils.base.getRecent.invalidate();
+      void utils.base.getRecent.invalidate();
       router.push(`/base/${base.id}`);
     },
   });
 
 
   const handleCreateBase = () => {
-    createBaseMutation.mutate({});
+    void createBaseMutation.mutate({});
   };
 
   const handleContextMenu = (e: React.MouseEvent, baseId: string, baseName: string) => {

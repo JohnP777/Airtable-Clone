@@ -17,7 +17,7 @@ export function BaseContextMenu({ baseId, isOpen, onClose, position }: BaseConte
   const utils = api.useUtils();
   const deleteMutation = api.base.delete.useMutation({
     onSuccess: () => {
-      utils.base.getRecent.invalidate();
+      void utils.base.getRecent.invalidate();
       onClose();
     },
   });
@@ -40,7 +40,7 @@ export function BaseContextMenu({ baseId, isOpen, onClose, position }: BaseConte
 
   const handleDelete = () => {
     if (confirm("Are you sure you want to delete this base?")) {
-      deleteMutation.mutate({ id: baseId });
+      void deleteMutation.mutate({ id: baseId });
     }
   };
 

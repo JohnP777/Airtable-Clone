@@ -9,7 +9,7 @@ export const baseRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const base = await ctx.db.base.create({
         data: {
-          name: input.name || "Untitled Base",
+          name: input.name ?? "Untitled Base",
           createdById: ctx.session.user.id,
         },
       });
