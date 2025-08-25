@@ -26,6 +26,20 @@ model Post {
     @@index([name])
 }
 
+model Base {
+    id        String   @id @default(cuid())
+    name      String   @default("Untitled Base")
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+    lastOpened DateTime @default(now())
+
+    createdBy   User   @relation(fields: [createdById], references: [id], onDelete: Cascade)
+    createdById String
+
+    @@index([createdById])
+    @@index([lastOpened])
+}
+
 // Necessary for Next auth
 model Account {
     id                       String  @id @default(cuid())
@@ -63,6 +77,7 @@ model User {
     accounts      Account[]
     sessions      Session[]
     posts         Post[]
+    bases         Base[]
 }
 
 model VerificationToken {

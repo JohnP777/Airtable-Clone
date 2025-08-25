@@ -32,11 +32,9 @@ export default async function RootLayout({
       <body className={`${isLoggedIn ? "bg-[#f9fafb]" : "bg-[#f5f6ee]"} text-gray-900`}>
         <TRPCReactProvider>
           {isLoggedIn ? (
-            <SidebarProvider>
-              <AuthedHeader />
-              <Sidebar />
-              <div className="pl-14 sm:pl-14">{children}</div>
-            </SidebarProvider>
+            <>
+              {children}
+            </>
           ) : (
             <>
               <Header />

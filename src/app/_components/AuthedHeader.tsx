@@ -10,7 +10,7 @@ export function AuthedHeader() {
 
   return (
     <header className="relative z-50 w-full bg-white border-b border-gray-200 shadow-sm">
-      <div className="mx-auto flex w-full h-12 items-center justify-between px-4">
+      <div className="mx-auto flex w-full h-14 items-center justify-between px-4">
         <div className="flex items-center gap-2">
           <div className="relative group z-50">
             <button
