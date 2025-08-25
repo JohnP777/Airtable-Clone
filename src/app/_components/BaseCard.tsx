@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { api } from "An/trpc/react";
@@ -34,12 +34,7 @@ export function BaseCard({ base, onContextMenu }: BaseCardProps) {
     },
   });
 
-  useEffect(() => {
-    if (isRenaming && inputRef.current) {
-      inputRef.current.focus();
-      inputRef.current.select();
-    }
-  }, [isRenaming]);
+
 
   const handleCardClick = () => {
     if (!isRenaming) {

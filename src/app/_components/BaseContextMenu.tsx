@@ -1,18 +1,17 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useRef, useEffect } from "react";
 import Image from "next/image";
 import { api } from "An/trpc/react";
 
 interface BaseContextMenuProps {
   baseId: string;
-  currentName: string;
   isOpen: boolean;
   onClose: () => void;
   position: { x: number; y: number };
 }
 
-export function BaseContextMenu({ baseId, currentName, isOpen, onClose, position }: BaseContextMenuProps) {
+export function BaseContextMenu({ baseId, isOpen, onClose, position }: BaseContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
 
   const utils = api.useUtils();

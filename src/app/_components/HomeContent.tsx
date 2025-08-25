@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSidebar } from "./SidebarContext";
 import { api } from "An/trpc/react";
@@ -33,12 +33,7 @@ export function HomeContent() {
       router.push(`/base/${base.id}`);
     },
   });
-  const updateLastOpenedMutation = api.base.updateLastOpened.useMutation({
-    onSuccess: () => {
-      // Invalidate and refetch recent bases to update the order
-      utils.base.getRecent.invalidate();
-    },
-  });
+
 
   const handleCreateBase = () => {
     createBaseMutation.mutate({});
@@ -159,13 +154,12 @@ export function HomeContent() {
       </div>
       
       {/* Context Menu */}
-      <BaseContextMenu
-        baseId={contextMenu.baseId}
-        currentName={contextMenu.baseName}
-        isOpen={contextMenu.isOpen}
-        onClose={closeContextMenu}
-        position={contextMenu.position}
-      />
+              <BaseContextMenu
+          baseId={contextMenu.baseId}
+          isOpen={contextMenu.isOpen}
+          onClose={closeContextMenu}
+          position={contextMenu.position}
+        />
     </div>
   );
 } 
