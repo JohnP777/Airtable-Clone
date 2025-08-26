@@ -6,7 +6,7 @@ import {
   getCoreRowModel,
   flexRender,
   createColumnHelper,
-  ColumnDef,
+  type ColumnDef,
 } from "@tanstack/react-table";
 import { api } from "An/trpc/react";
 
