@@ -21,6 +21,10 @@ export function BaseContent({ baseId }: BaseContentProps) {
 
   // Display the first table
   const firstTable = tables[0];
+  
+  if (!firstTable) {
+    return null;
+  }
 
   return (
     <div className="w-full h-full">
