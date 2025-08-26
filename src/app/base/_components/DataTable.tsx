@@ -167,8 +167,8 @@ export function DataTable({ tableId }: DataTableProps) {
             {isEditing ? (
               <input
                 type="text"
-                value={editingCell.value}
-                onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
+                value={editingCell?.value ?? ""}
+                onChange={(e) => editingCell && setEditingCell({ ...editingCell, value: e.target.value })}
                 onBlur={() => {
                   if (editingCell) {
                     void updateCellMutation.mutate({
