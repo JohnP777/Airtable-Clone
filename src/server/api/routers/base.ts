@@ -9,10 +9,39 @@ export const baseRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const base = await ctx.db.base.create({
         data: {
-          name: input.name ?? "Untitled Base",
+          name: input.name ?? "Untitled Base", // Changed from || to ??
           createdById: ctx.session.user.id,
         },
       });
+
+      // Create a default table for the new base
+      await ctx.db.table.create({
+        data: {
+          baseId: base.id,
+          name: "Table 1",
+          order: 0,
+          columns: {
+            create: [
+              { name: "Name", order: 0 },
+              { name: "Notes", order: 1 },
+              { name: "Assignee", order: 2 },
+              { name: "Status", order: 3 },
+              { name: "Attachments", order: 4 }
+            ]
+          },
+          rows: {
+            create: [
+              { order: 0 },
+              { order: 1 },
+              { order: 2 }
+            ]
+          },
+          views: {
+            create: [{ name: "Grid view", type: "grid", order: 0 }]
+          }
+        }
+      });
+
       return base;
     }),
 
@@ -29,6 +58,14 @@ export const baseRouter = createTRPCRouter({
           lastOpened: "desc",
         },
         take: input.limit,
+        select: { // Explicitly selecting fields for optimization
+          id: true,
+          name: true,
+          createdAt: true,
+          updatedAt: true,
+          lastOpened: true,
+          createdById: true,
+        },
       });
       return bases;
     }),

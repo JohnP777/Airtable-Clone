@@ -36,8 +36,96 @@ model Base {
     createdBy   User   @relation(fields: [createdById], references: [id], onDelete: Cascade)
     createdById String
 
+    tables     Table[]
+
     @@index([createdById])
     @@index([lastOpened])
+    @@index([createdById, lastOpened(sort: Desc)])
+}
+
+model Table {
+    id        String   @id @default(cuid())
+    name      String   @default("Untitled Table")
+    order     Int      @default(0)
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    base     Base   @relation(fields: [baseId], references: [id], onDelete: Cascade)
+    baseId   String
+
+    views    View[]
+    rows     TableRow[]
+    columns  TableColumn[]
+    cells    TableCell[]
+
+    @@index([baseId])
+    @@index([baseId, order])
+}
+
+model TableColumn {
+    id        String   @id @default(cuid())
+    name      String   @default("Untitled Column")
+    type      String   @default("text")
+    order     Int      @default(0)
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    table    Table  @relation(fields: [tableId], references: [id], onDelete: Cascade)
+    tableId  String
+
+    cells    TableCell[]
+
+    @@index([tableId])
+    @@index([tableId, order])
+}
+
+model TableRow {
+    id        String   @id @default(cuid())
+    order     Int      @default(0)
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    table    Table  @relation(fields: [tableId], references: [id], onDelete: Cascade)
+    tableId  String
+
+    cells    TableCell[]
+
+    @@index([tableId])
+    @@index([tableId, order])
+}
+
+model TableCell {
+    id        String   @id @default(cuid())
+    value     String   @default("")
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    table     Table      @relation(fields: [tableId], references: [id], onDelete: Cascade)
+    tableId   String
+    row       TableRow   @relation(fields: [rowId], references: [id], onDelete: Cascade)
+    rowId     String
+    column    TableColumn @relation(fields: [columnId], references: [id], onDelete: Cascade)
+    columnId  String
+
+    @@unique([tableId, rowId, columnId])
+    @@index([tableId])
+    @@index([rowId])
+    @@index([columnId])
+}
+
+model View {
+    id        String   @id @default(cuid())
+    name      String   @default("Grid view")
+    type      String   @default("grid")
+    order     Int      @default(0)
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    table    Table  @relation(fields: [tableId], references: [id], onDelete: Cascade)
+    tableId  String
+
+    @@index([tableId])
+    @@index([tableId, order])
 }
 
 // Necessary for Next auth
