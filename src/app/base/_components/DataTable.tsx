@@ -5,36 +5,15 @@ import {
   useReactTable,
   getCoreRowModel,
   flexRender,
-  createColumnHelper,
   type ColumnDef,
+  type Column,
+  type Row,
 } from "@tanstack/react-table";
 import { api } from "An/trpc/react";
 
-interface CellData {
-  id: string;
-  value: string;
-  columnId: string;
-  rowId: string;
-}
-
-interface ColumnData {
-  id: string;
-  name: string;
-  order: number;
-}
-
-interface RowData {
-  id: string;
-  order: number;
-  cells: CellData[];
-}
-
-interface TableData {
-  id: string;
-  name: string;
-  columns: ColumnData[];
-  rows: RowData[];
-}
+// Added strong types for table row shape and cell value
+type CellValue = { value: string; cellId?: string; columnId: string; rowId: string };
+type RowRecord = { id: string } & Record<string, CellValue>;
 
 interface DataTableProps {
   tableId: string;
@@ -81,15 +60,15 @@ export function DataTable({ tableId }: DataTableProps) {
 
   // Transform data for TanStack Table
   const tableRows = useMemo(() => {
-    if (!tableData) return [];
+    if (!tableData) return [] as RowRecord[];
 
-    return tableData.rows.map((row) => {
-      const rowData: Record<string, any> = { id: row.id };
+    return tableData.rows.map((row: { id: string; cells: { id?: string; value?: string; columnId: string; rowId: string }[] }) => {
+      const rowData = { id: row.id } as RowRecord;
       
-      tableData.columns.forEach((column) => {
-        const cell = row.cells.find((c) => c.columnId === column.id);
+      tableData.columns.forEach((column: { id: string; name: string }) => {
+        const cell = row.cells.find((c: { columnId: string }) => c.columnId === column.id);
         rowData[column.id] = {
-          value: cell?.value || "",
+          value: cell?.value ?? "",
           cellId: cell?.id,
           columnId: column.id,
           rowId: row.id,
@@ -101,36 +80,38 @@ export function DataTable({ tableId }: DataTableProps) {
   }, [tableData]);
 
   // Create column definitions
-  const columns = useMemo(() => {
-    if (!tableData) return [];
+  const columns = useMemo<ColumnDef<RowRecord, CellValue>[]>(() => {
+    if (!tableData) return [] as ColumnDef<RowRecord, CellValue>[];
 
-    return tableData.columns.map((column) => ({
+    return tableData.columns.map((column: { id: string; name: string }) => ({
       id: column.id,
       header: () => (
         <div className="px-2 py-2 font-medium text-gray-900 min-w-[120px] max-w-[120px]">
           {editingColumn?.columnId === column.id ? (
             <input
               type="text"
-              value={editingColumn.name}
-              onChange={(e) => setEditingColumn({ ...editingColumn, name: e.target.value })}
+              value={editingColumn?.name ?? ""}
+              onChange={(e) => setEditingColumn((prev) => (prev ? { ...prev, name: e.target.value } : prev))}
               onBlur={() => {
-                if (editingColumn) {
+                setEditingColumn((prev) => {
+                  if (!prev) return prev;
                   void updateColumnMutation.mutate({
-                    columnId: editingColumn.columnId,
-                    name: editingColumn.name,
+                    columnId: prev.columnId,
+                    name: prev.name,
                   });
-                  setEditingColumn(null);
-                }
+                  return null;
+                });
               }}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
-                  if (editingColumn) {
+                  setEditingColumn((prev) => {
+                    if (!prev) return prev;
                     void updateColumnMutation.mutate({
-                      columnId: editingColumn.columnId,
-                      name: editingColumn.name,
+                      columnId: prev.columnId,
+                      name: prev.name,
                     });
-                    setEditingColumn(null);
-                  }
+                    return null;
+                  });
                 } else if (e.key === "Escape") {
                   setEditingColumn(null);
                 }
@@ -149,8 +130,8 @@ export function DataTable({ tableId }: DataTableProps) {
         </div>
       ),
       accessorKey: column.id,
-      cell: ({ row, column }: any) => {
-        const cellData = row.getValue(column.id);
+      cell: ({ row, column }: { row: Row<RowRecord>; column: Column<RowRecord, CellValue> }) => {
+        const cellData = row.getValue<CellValue>(column.id);
         const isEditing = editingCell?.rowId === cellData.rowId && editingCell?.columnId === cellData.columnId;
 
         return (
