@@ -81,7 +81,7 @@ export const baseRouter = createTRPCRouter({
             tableId: table.id,
             rowId: tableRow.id,
             columnId: tableColumn.id,
-            value: row.cells[colIndex]?.value || ''
+            value: row.cells[colIndex]?.value ?? ''
           });
         }
       }

@@ -123,7 +123,7 @@ export function DataTable({ tableId }: DataTableProps) {
       // Return a context object with the snapshotted value
       return { previousData, columnId };
     },
-    onError: (err, { columnId }, context) => {
+    onError: (err, { columnId: _columnId }, context) => {
       // If the mutation fails, use the context returned from onMutate to roll back
       if (context?.previousData) {
         utils.table.getTableData.setData({ tableId }, context.previousData);
@@ -255,13 +255,13 @@ export function DataTable({ tableId }: DataTableProps) {
       // Return a context object with the snapshotted value
       return { previousData, tempId: `temp-col-${Date.now()}` };
     },
-    onError: (err, { tableId }, context) => {
+    onError: (err, { tableId }, _context) => {
       // If the mutation fails, use the context returned from onMutate to roll back
-      if (context?.previousData) {
-        utils.table.getTableData.setData({ tableId }, context.previousData);
+      if (_context?.previousData) {
+        utils.table.getTableData.setData({ tableId }, _context.previousData);
       }
     },
-    onSuccess: (data, variables, context) => {
+    onSuccess: (data, variables, _context) => {
       // Update the cache to replace temporary IDs with real IDs
       utils.table.getTableData.setData({ tableId: variables.tableId }, (old) => {
         if (!old) return old;
