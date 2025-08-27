@@ -219,7 +219,7 @@ export function DataTable({ tableId }: DataTableProps) {
         const tempId = `temp-col-${Date.now()}`;
         const newColumn = {
           id: tempId,
-          name: name || `Column ${old.columns.length + 1}`,
+          name: name ?? `Column ${old.columns.length + 1}`,
           order: old.columns.length,
           tableId: tableId,
           type: "text",
@@ -329,7 +329,7 @@ export function DataTable({ tableId }: DataTableProps) {
     if (!tableData) return [] as ColumnDef<RowRecord, CellValue>[];
 
     // Add row number column as the first column
-    const rowNumberColumn: ColumnDef<RowRecord, any> = {
+    const rowNumberColumn: ColumnDef<RowRecord, CellValue> = {
       id: 'rowNumber',
       header: () => (
         <div className="px-2 py-2 font-medium text-gray-900 w-full h-full flex items-center justify-center">
@@ -453,7 +453,7 @@ export function DataTable({ tableId }: DataTableProps) {
 
     // Return row number column + data columns
     return [rowNumberColumn, ...dataColumns];
-  }, [tableData, editingColumn, editingCell, updateColumnMutation, updateCellMutation, tableId]);
+  }, [tableData, editingColumn, editingCell, updateColumnMutation, updateCellMutation, tableId, localCellValues]);
 
   const table = useReactTable({
     data: tableRows,
