@@ -77,18 +77,18 @@ export function DataTable({ tableId }: DataTableProps) {
       // Return a context object with the snapshotted value
       return { previousData, rowId, columnId, previousLocalValue: localCellValues[cellKey] };
     },
-    onError: (err, { tableId, rowId, columnId }, context) => {
+    onError: (err, { tableId, rowId, columnId }, _context) => {
       // If the mutation fails, use the context returned from onMutate to roll back
-      if (context?.previousData) {
-        utils.table.getTableData.setData({ tableId }, context.previousData);
+      if (_context?.previousData) {
+        utils.table.getTableData.setData({ tableId }, _context.previousData);
       }
       // Also rollback local state
-      if (context?.previousLocalValue !== undefined) {
+      if (_context?.previousLocalValue !== undefined) {
         const cellKey = `${rowId}-${columnId}`;
         setLocalCellValues(prev => {
           const newState = { ...prev };
-          if (context.previousLocalValue !== undefined) {
-            newState[cellKey] = context.previousLocalValue;
+          if (_context.previousLocalValue !== undefined) {
+            newState[cellKey] = _context.previousLocalValue;
           }
           return newState;
         });
@@ -172,13 +172,13 @@ export function DataTable({ tableId }: DataTableProps) {
       // Return a context object with the snapshotted value
       return { previousData, tempId: `temp-${Date.now()}` };
     },
-    onError: (err, { tableId }, context) => {
+    onError: (err, { tableId }, _context) => {
       // If the mutation fails, use the context returned from onMutate to roll back
-      if (context?.previousData) {
-        utils.table.getTableData.setData({ tableId }, context.previousData);
+      if (_context?.previousData) {
+        utils.table.getTableData.setData({ tableId }, _context.previousData);
       }
     },
-    onSuccess: (data, variables, context) => {
+    onSuccess: (data, variables, _context) => {
       // Update the cache to replace temporary IDs with real IDs
       utils.table.getTableData.setData({ tableId: variables.tableId }, (old) => {
         if (!old) return old;
