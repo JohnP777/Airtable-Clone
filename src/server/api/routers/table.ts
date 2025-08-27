@@ -247,7 +247,10 @@ export const tableRouter = createTRPCRouter({
     }),
 
   addColumn: protectedProcedure
-    .input(z.object({ tableId: z.string() }))
+    .input(z.object({ 
+      tableId: z.string(),
+      name: z.string().optional() // Optional custom name
+    }))
     .mutation(async ({ ctx, input }) => {
       // Verify user owns the table
       const table = await ctx.db.table.findFirst({
@@ -269,7 +272,7 @@ export const tableRouter = createTRPCRouter({
       const column = await ctx.db.tableColumn.create({
         data: {
           tableId: input.tableId,
-          name: `Column ${columnCount + 1}`,
+          name: input.name || `Column ${columnCount + 1}`, // Use custom name or default
           order: columnCount
         }
       });
@@ -287,5 +290,54 @@ export const tableRouter = createTRPCRouter({
       });
 
       return column;
+    }),
+
+  populateCellsWithData: protectedProcedure
+    .input(z.object({ 
+      tableId: z.string(),
+      cellData: z.array(z.object({
+        rowId: z.string(),
+        columnId: z.string(),
+        value: z.string()
+      }))
+    }))
+    .mutation(async ({ ctx, input }) => {
+      // Verify user owns the table
+      const table = await ctx.db.table.findFirst({
+        where: { 
+          id: input.tableId,
+          base: { createdById: ctx.session.user.id }
+        }
+      });
+
+      if (!table) {
+        throw new Error("Table not found");
+      }
+
+      // Update multiple cells with the provided data
+      const updatePromises = input.cellData.map(cell => 
+        ctx.db.tableCell.upsert({
+          where: {
+            tableId_rowId_columnId: {
+              tableId: input.tableId,
+              rowId: cell.rowId,
+              columnId: cell.columnId
+            }
+          },
+          update: {
+            value: cell.value
+          },
+          create: {
+            tableId: input.tableId,
+            rowId: cell.rowId,
+            columnId: cell.columnId,
+            value: cell.value
+          }
+        })
+      );
+
+      await Promise.all(updatePromises);
+
+      return { success: true, updatedCells: input.cellData.length };
     })
 }); 

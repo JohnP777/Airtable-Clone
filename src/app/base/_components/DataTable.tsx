@@ -205,7 +205,7 @@ export function DataTable({ tableId }: DataTableProps) {
   });
 
   const addColumnMutation = api.table.addColumn.useMutation({
-    onMutate: async ({ tableId }) => {
+    onMutate: async ({ tableId, name }) => {
       // Cancel any outgoing refetches
       await utils.table.getTableData.cancel({ tableId });
       
@@ -219,7 +219,7 @@ export function DataTable({ tableId }: DataTableProps) {
         const tempId = `temp-col-${Date.now()}`;
         const newColumn = {
           id: tempId,
-          name: `Column ${old.columns.length + 1}`,
+          name: name || `Column ${old.columns.length + 1}`,
           order: old.columns.length,
           tableId: tableId,
           type: "text",
@@ -328,10 +328,27 @@ export function DataTable({ tableId }: DataTableProps) {
   const columns = useMemo<ColumnDef<RowRecord, CellValue>[]>(() => {
     if (!tableData) return [] as ColumnDef<RowRecord, CellValue>[];
 
-    return tableData.columns.map((column: { id: string; name: string }) => ({
+    // Add row number column as the first column
+    const rowNumberColumn: ColumnDef<RowRecord, any> = {
+      id: 'rowNumber',
+      header: () => (
+        <div className="px-2 py-2 font-medium text-gray-900 w-full h-full flex items-center justify-center">
+          #
+        </div>
+      ),
+      cell: ({ row }) => (
+        <div className="px-2 py-2 w-full h-full flex items-center justify-center text-gray-600 font-medium">
+          {row.index + 1}
+        </div>
+      ),
+      size: 60, // Narrow column for row numbers
+    };
+
+    // Create data columns
+    const dataColumns = tableData.columns.map((column: { id: string; name: string }) => ({
       id: column.id,
       header: () => (
-        <div className={`px-2 py-2 font-medium text-gray-900 min-w-[120px] max-w-[120px]`}>
+        <div className={`px-2 py-2 font-medium text-gray-900 w-full h-full flex items-center`}>
           {editingColumn?.columnId === column.id ? (
             <input
               type="text"
@@ -361,7 +378,7 @@ export function DataTable({ tableId }: DataTableProps) {
                   setEditingColumn(null);
                 }
               }}
-              className="w-full bg-transparent border-none outline-none focus:ring-0 font-medium max-w-[120px]"
+              className="w-full h-full bg-transparent border-none outline-none focus:ring-0 font-medium"
               autoFocus
             />
           ) : (
@@ -381,17 +398,8 @@ export function DataTable({ tableId }: DataTableProps) {
 
         return (
           <div 
-            className={`px-2 py-2 min-w-[120px] max-w-[120px] cursor-pointer w-full flex items-center pointer-events-none ${
-              cellData.rowId.startsWith('temp-') || cellData.columnId.startsWith('temp-col-') 
-                ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
-                : ''
-            }`}
+            className="px-2 py-2 cursor-pointer w-full h-full flex items-center pointer-events-none"
             onDoubleClick={() => {
-              // Don't allow editing cells in temporary rows or columns
-              if (cellData.rowId.startsWith('temp-') || cellData.columnId.startsWith('temp-col-')) {
-                return;
-              }
-              
               setEditingCell({
                 rowId: cellData.rowId,
                 columnId: cellData.columnId,
@@ -405,7 +413,7 @@ export function DataTable({ tableId }: DataTableProps) {
                 value={editingCell?.value ?? ""}
                 onChange={(e) => editingCell && setEditingCell({ ...editingCell, value: e.target.value })}
                 onBlur={() => {
-                  if (editingCell && !editingCell.rowId.startsWith('temp-') && !editingCell.columnId.startsWith('temp-col-')) {
+                  if (editingCell) {
                     void updateCellMutation.mutate({
                       tableId,
                       rowId: editingCell.rowId,
@@ -417,7 +425,7 @@ export function DataTable({ tableId }: DataTableProps) {
                 }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
-                    if (editingCell && !editingCell.rowId.startsWith('temp-') && !editingCell.columnId.startsWith('temp-col-')) {
+                    if (editingCell) {
                       void updateCellMutation.mutate({
                         tableId,
                         rowId: editingCell.rowId,
@@ -430,11 +438,11 @@ export function DataTable({ tableId }: DataTableProps) {
                     setEditingCell(null);
                   }
                 }}
-                className="w-full bg-transparent border-none outline-none focus:ring-0 max-w-[120px] pointer-events-auto"
+                className="w-full h-full bg-transparent border-none outline-none focus:ring-0 pointer-events-auto"
                 autoFocus
               />
             ) : (
-              <div className="min-h-[20px] truncate w-full pointer-events-auto">
+              <div className="w-full h-full flex items-center pointer-events-auto">
                 {localCellValues[`${cellData.rowId}-${cellData.columnId}`] ?? cellData.value}
               </div>
             )}
@@ -442,6 +450,9 @@ export function DataTable({ tableId }: DataTableProps) {
         );
       },
     }));
+
+    // Return row number column + data columns
+    return [rowNumberColumn, ...dataColumns];
   }, [tableData, editingColumn, editingCell, updateColumnMutation, updateCellMutation, tableId]);
 
   const table = useReactTable({
@@ -460,13 +471,13 @@ export function DataTable({ tableId }: DataTableProps) {
         <table className="w-full border-collapse border border-gray-200">
           <thead className="bg-gray-50 sticky top-0">
             {table.getHeaderGroups().map((headerGroup) => (
-              <tr key={headerGroup.id}>
+              <tr key={headerGroup.id} className="h-12">
                 {headerGroup.headers.map((header) => (
-                  <th key={header.id} className="border border-gray-200">
+                  <th key={header.id} className="border border-gray-200 h-12">
                     {flexRender(header.column.columnDef.header, header.getContext())}
                   </th>
                 ))}
-                <th className="border border-gray-200 bg-gray-50 w-8">
+                <th className="border border-gray-200 bg-gray-50 w-8 h-12">
                   <button
                     onClick={() => void addColumnMutation.mutate({ tableId })}
                     className="w-full h-full px-2 py-1 text-gray-500 hover:text-gray-700 hover:bg-gray-100 text-sm"
@@ -479,9 +490,9 @@ export function DataTable({ tableId }: DataTableProps) {
           </thead>
           <tbody>
             {table.getRowModel().rows.map((row) => (
-              <tr key={row.id} className="hover:bg-gray-100 transition-colors duration-150">
+              <tr key={row.id} className="hover:bg-gray-100 transition-colors duration-150 h-12">
                 {row.getVisibleCells().map((cell) => (
-                  <td key={cell.id} className="border border-gray-200">
+                  <td key={cell.id} className="border border-gray-200 h-12">
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </td>
                 ))}
@@ -489,8 +500,8 @@ export function DataTable({ tableId }: DataTableProps) {
             ))}
             <tr>
               <td
-                colSpan={tableData.columns.length + 2}
-                className="border border-gray-200 bg-gray-50"
+                colSpan={tableData.columns.length + 3}
+                className="border border-gray-200 bg-gray-50 h-12"
               >
                 <button
                   onClick={() => void addRowMutation.mutate({ tableId })}
