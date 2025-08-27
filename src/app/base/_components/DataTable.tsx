@@ -21,32 +21,8 @@ interface DataTableProps {
 
 export function DataTable({ tableId }: DataTableProps) {
   const utils = api.useUtils();
-  const { data: tableData, isLoading } = api.table.getTableData.useQuery({ tableId });
+  const { data: tableData } = api.table.getTableData.useQuery({ tableId });
   
-  const updateCellMutation = api.table.updateCell.useMutation({
-    onSuccess: () => {
-      void utils.table.getTableData.invalidate({ tableId });
-    },
-  });
-
-  const updateColumnMutation = api.table.updateColumn.useMutation({
-    onSuccess: () => {
-      void utils.table.getTableData.invalidate({ tableId });
-    },
-  });
-
-  const addRowMutation = api.table.addRow.useMutation({
-    onSuccess: () => {
-      void utils.table.getTableData.invalidate({ tableId });
-    },
-  });
-
-  const addColumnMutation = api.table.addColumn.useMutation({
-    onSuccess: () => {
-      void utils.table.getTableData.invalidate({ tableId });
-    },
-  });
-
   const [editingCell, setEditingCell] = useState<{
     rowId: string;
     columnId: string;
@@ -57,6 +33,275 @@ export function DataTable({ tableId }: DataTableProps) {
     columnId: string;
     name: string;
   } | null>(null);
+
+  // No more loading state tracking - we want everything to stay stable
+
+  // Local state to track cell values for immediate updates
+  const [localCellValues, setLocalCellValues] = useState<Record<string, string>>({});
+
+  const updateCellMutation = api.table.updateCell.useMutation({
+    onMutate: async ({ tableId, rowId, columnId, value }) => {
+      // Cancel any outgoing refetches
+      await utils.table.getTableData.cancel({ tableId });
+      
+      // Update local state immediately for instant UI feedback
+      const cellKey = `${rowId}-${columnId}`;
+      setLocalCellValues(prev => ({ ...prev, [cellKey]: value }));
+      
+      // Snapshot the previous value
+      const previousData = utils.table.getTableData.getData({ tableId });
+      
+      // Optimistically update the cache
+      utils.table.getTableData.setData({ tableId }, (old) => {
+        if (!old) return old;
+        
+        return {
+          ...old,
+          rows: old.rows.map(row => {
+            if (row.id === rowId) {
+              return {
+                ...row,
+                cells: row.cells.map(cell => {
+                  if (cell.columnId === columnId) {
+                    return { ...cell, value };
+                  }
+                  return cell;
+                })
+              };
+            }
+            return row;
+          })
+        };
+      });
+      
+      // Return a context object with the snapshotted value
+      return { previousData, rowId, columnId, previousLocalValue: localCellValues[cellKey] };
+    },
+    onError: (err, { tableId, rowId, columnId }, context) => {
+      // If the mutation fails, use the context returned from onMutate to roll back
+      if (context?.previousData) {
+        utils.table.getTableData.setData({ tableId }, context.previousData);
+      }
+      // Also rollback local state
+      if (context?.previousLocalValue !== undefined) {
+        const cellKey = `${rowId}-${columnId}`;
+        setLocalCellValues(prev => {
+          const newState = { ...prev };
+          if (context.previousLocalValue !== undefined) {
+            newState[cellKey] = context.previousLocalValue;
+          }
+          return newState;
+        });
+      }
+    },
+    // No onSettled - we don't want to refetch or change anything
+  });
+
+  const updateColumnMutation = api.table.updateColumn.useMutation({
+    onMutate: async ({ columnId, name }) => {
+      // Cancel any outgoing refetches
+      await utils.table.getTableData.cancel({ tableId });
+      
+      // Snapshot the previous value
+      const previousData = utils.table.getTableData.getData({ tableId });
+      
+      // Optimistically update the cache
+      utils.table.getTableData.setData({ tableId }, (old) => {
+        if (!old) return old;
+        
+        return {
+          ...old,
+          columns: old.columns.map(column => {
+            if (column.id === columnId) {
+              return { ...column, name };
+            }
+            return column;
+          })
+        };
+      });
+      
+      // Return a context object with the snapshotted value
+      return { previousData, columnId };
+    },
+    onError: (err, { columnId }, context) => {
+      // If the mutation fails, use the context returned from onMutate to roll back
+      if (context?.previousData) {
+        utils.table.getTableData.setData({ tableId }, context.previousData);
+      }
+    },
+    // No onSettled - we don't want to refetch or change anything
+  });
+
+  const addRowMutation = api.table.addRow.useMutation({
+    onMutate: async ({ tableId }) => {
+      // Cancel any outgoing refetches
+      await utils.table.getTableData.cancel({ tableId });
+      
+      // Snapshot the previous value
+      const previousData = utils.table.getTableData.getData({ tableId });
+      
+      // Optimistically add a new row
+      utils.table.getTableData.setData({ tableId }, (old) => {
+        if (!old) return old;
+        
+        const tempId = `temp-${Date.now()}`;
+        const newRow = {
+          id: tempId,
+          order: old.rows.length,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          tableId: tableId,
+          cells: old.columns.map(column => ({
+            id: `temp-cell-${Date.now()}-${column.id}`,
+            value: "",
+            columnId: column.id,
+            rowId: tempId,
+            tableId: tableId,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            column: column
+          }))
+        };
+        
+        return {
+          ...old,
+          rows: [...old.rows, newRow]
+        };
+      });
+      
+      // Return a context object with the snapshotted value
+      return { previousData, tempId: `temp-${Date.now()}` };
+    },
+    onError: (err, { tableId }, context) => {
+      // If the mutation fails, use the context returned from onMutate to roll back
+      if (context?.previousData) {
+        utils.table.getTableData.setData({ tableId }, context.previousData);
+      }
+    },
+    onSuccess: (data, variables, context) => {
+      // Update the cache to replace temporary IDs with real IDs
+      utils.table.getTableData.setData({ tableId: variables.tableId }, (old) => {
+        if (!old) return old;
+        
+        return {
+          ...old,
+          rows: old.rows.map(row => {
+            if (row.id.startsWith('temp-')) {
+              return {
+                ...row,
+                id: data.id,
+                cells: row.cells.map(cell => ({
+                  ...cell,
+                  rowId: data.id
+                }))
+              };
+            }
+            return row;
+          })
+        };
+      });
+    },
+    // No onSettled - we don't want to refetch or change anything
+  });
+
+  const addColumnMutation = api.table.addColumn.useMutation({
+    onMutate: async ({ tableId }) => {
+      // Cancel any outgoing refetches
+      await utils.table.getTableData.cancel({ tableId });
+      
+      // Snapshot the previous value
+      const previousData = utils.table.getTableData.getData({ tableId });
+      
+      // Optimistically add a new column
+      utils.table.getTableData.setData({ tableId }, (old) => {
+        if (!old) return old;
+        
+        const tempId = `temp-col-${Date.now()}`;
+        const newColumn = {
+          id: tempId,
+          name: `Column ${old.columns.length + 1}`,
+          order: old.columns.length,
+          tableId: tableId,
+          type: "text",
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+        
+        // Add cells for the new column to all existing rows
+        const updatedRows = old.rows.map(row => ({
+          ...row,
+          cells: [
+            ...row.cells,
+            {
+              id: `temp-cell-${Date.now()}-${row.id}`,
+              value: "",
+              columnId: tempId,
+              rowId: row.id,
+              tableId: tableId,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+              column: newColumn
+            }
+          ]
+        }));
+        
+        return {
+          ...old,
+          columns: [...old.columns, newColumn],
+          rows: updatedRows
+        };
+      });
+      
+      // Return a context object with the snapshotted value
+      return { previousData, tempId: `temp-col-${Date.now()}` };
+    },
+    onError: (err, { tableId }, context) => {
+      // If the mutation fails, use the context returned from onMutate to roll back
+      if (context?.previousData) {
+        utils.table.getTableData.setData({ tableId }, context.previousData);
+      }
+    },
+    onSuccess: (data, variables, context) => {
+      // Update the cache to replace temporary IDs with real IDs
+      utils.table.getTableData.setData({ tableId: variables.tableId }, (old) => {
+        if (!old) return old;
+        
+        return {
+          ...old,
+          columns: old.columns.map(column => {
+            if (column.id.startsWith('temp-col-')) {
+              return {
+                ...column,
+                id: data.id,
+                name: data.name,
+                type: data.type
+              };
+            }
+            return column;
+          }),
+          rows: old.rows.map(row => ({
+            ...row,
+            cells: row.cells.map(cell => {
+              if (cell.columnId.startsWith('temp-col-')) {
+                return {
+                  ...cell,
+                  columnId: data.id,
+                  column: {
+                    ...cell.column,
+                    id: data.id,
+                    name: data.name,
+                    type: data.type
+                  }
+                };
+              }
+              return cell;
+            })
+          }))
+        };
+      });
+    },
+    // No onSettled - we don't want to refetch or change anything
+  });
 
   // Transform data for TanStack Table
   const tableRows = useMemo(() => {
@@ -86,7 +331,7 @@ export function DataTable({ tableId }: DataTableProps) {
     return tableData.columns.map((column: { id: string; name: string }) => ({
       id: column.id,
       header: () => (
-        <div className="px-2 py-2 font-medium text-gray-900 min-w-[120px] max-w-[120px]">
+        <div className={`px-2 py-2 font-medium text-gray-900 min-w-[120px] max-w-[120px]`}>
           {editingColumn?.columnId === column.id ? (
             <input
               type="text"
@@ -136,14 +381,23 @@ export function DataTable({ tableId }: DataTableProps) {
 
         return (
           <div 
-            className="px-2 py-2 min-w-[120px] max-w-[120px] cursor-pointer w-full flex items-center pointer-events-none"
-            onDoubleClick={() =>
+            className={`px-2 py-2 min-w-[120px] max-w-[120px] cursor-pointer w-full flex items-center pointer-events-none ${
+              cellData.rowId.startsWith('temp-') || cellData.columnId.startsWith('temp-col-') 
+                ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                : ''
+            }`}
+            onDoubleClick={() => {
+              // Don't allow editing cells in temporary rows or columns
+              if (cellData.rowId.startsWith('temp-') || cellData.columnId.startsWith('temp-col-')) {
+                return;
+              }
+              
               setEditingCell({
                 rowId: cellData.rowId,
                 columnId: cellData.columnId,
-                value: cellData.value,
-              })
-            }
+                value: localCellValues[`${cellData.rowId}-${cellData.columnId}`] ?? cellData.value,
+              });
+            }}
           >
             {isEditing ? (
               <input
@@ -151,7 +405,7 @@ export function DataTable({ tableId }: DataTableProps) {
                 value={editingCell?.value ?? ""}
                 onChange={(e) => editingCell && setEditingCell({ ...editingCell, value: e.target.value })}
                 onBlur={() => {
-                  if (editingCell) {
+                  if (editingCell && !editingCell.rowId.startsWith('temp-') && !editingCell.columnId.startsWith('temp-col-')) {
                     void updateCellMutation.mutate({
                       tableId,
                       rowId: editingCell.rowId,
@@ -163,7 +417,7 @@ export function DataTable({ tableId }: DataTableProps) {
                 }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
-                    if (editingCell) {
+                    if (editingCell && !editingCell.rowId.startsWith('temp-') && !editingCell.columnId.startsWith('temp-col-')) {
                       void updateCellMutation.mutate({
                         tableId,
                         rowId: editingCell.rowId,
@@ -181,7 +435,7 @@ export function DataTable({ tableId }: DataTableProps) {
               />
             ) : (
               <div className="min-h-[20px] truncate w-full pointer-events-auto">
-                {cellData.value}
+                {localCellValues[`${cellData.rowId}-${cellData.columnId}`] ?? cellData.value}
               </div>
             )}
           </div>
@@ -195,10 +449,6 @@ export function DataTable({ tableId }: DataTableProps) {
     columns,
     getCoreRowModel: getCoreRowModel(),
   });
-
-  if (isLoading) {
-    return null;
-  }
 
   if (!tableData) {
     return null;

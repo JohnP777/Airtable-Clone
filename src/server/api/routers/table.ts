@@ -134,6 +134,30 @@ export const tableRouter = createTRPCRouter({
         throw new Error("Table not found");
       }
 
+      // Verify the row exists
+      const row = await ctx.db.tableRow.findFirst({
+        where: { 
+          id: input.rowId,
+          tableId: input.tableId
+        }
+      });
+
+      if (!row) {
+        throw new Error("Row not found");
+      }
+
+      // Verify the column exists
+      const column = await ctx.db.tableColumn.findFirst({
+        where: { 
+          id: input.columnId,
+          tableId: input.tableId
+        }
+      });
+
+      if (!column) {
+        throw new Error("Column not found");
+      }
+
       const cell = await ctx.db.tableCell.upsert({
         where: {
           tableId_rowId_columnId: {
