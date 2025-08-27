@@ -25,7 +25,7 @@ export const DEFAULT_COLUMNS = [
 ];
 
 // Generate a random subset of columns for variety
-export function getRandomColumns(count: number = 8) {
+export function getRandomColumns(count = 8) {
   const shuffled = faker.helpers.shuffle([...DEFAULT_COLUMNS]);
   return shuffled.slice(0, Math.min(count, DEFAULT_COLUMNS.length));
 }
@@ -42,7 +42,7 @@ export function generateRowData(columns: typeof DEFAULT_COLUMNS) {
 }
 
 // Generate multiple rows of sample data
-export function generateSampleRows(columns: typeof DEFAULT_COLUMNS, rowCount: number = 10) {
+export function generateSampleRows(columns: typeof DEFAULT_COLUMNS, rowCount = 10) {
   const rows = [];
   
   for (let i = 0; i < rowCount; i++) {

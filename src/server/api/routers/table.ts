@@ -272,7 +272,7 @@ export const tableRouter = createTRPCRouter({
       const column = await ctx.db.tableColumn.create({
         data: {
           tableId: input.tableId,
-          name: input.name || `Column ${columnCount + 1}`, // Use custom name or default
+          name: input.name ?? `Column ${columnCount + 1}`, // Use custom name or default
           order: columnCount
         }
       });
