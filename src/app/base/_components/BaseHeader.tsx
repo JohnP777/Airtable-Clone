@@ -31,9 +31,6 @@ export function BaseHeader() {
             Forms
           </button>
         </div>
-        
-        {/* Right side - empty for now */}
-        <div className="w-28"></div>
       </div>
     </header>
   );

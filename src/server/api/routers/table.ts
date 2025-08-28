@@ -1,5 +1,29 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc";
+import { faker } from '@faker-js/faker';
+
+// Function to generate fake data for business columns
+function generateFakeBusinessData() {
+  return {
+    columns: [
+      { name: "Employee Name", order: 0 },
+      { name: "Department", order: 1 },
+      { name: "Email", order: 2 },
+      { name: "Salary", order: 3 },
+      { name: "Start Date", order: 4 }
+    ],
+    rows: Array.from({ length: 100 }, (_, index) => ({
+      order: index,
+      cells: [
+        { value: faker.person.fullName() },
+        { value: faker.helpers.arrayElement(['Engineering', 'Marketing', 'Sales', 'HR', 'Finance', 'Operations', 'Design', 'Product']) },
+        { value: faker.internet.email() },
+        { value: `$${faker.number.int({ min: 45000, max: 180000 }).toLocaleString()}` },
+        { value: faker.date.past({ years: 3 }).toLocaleDateString() }
+      ]
+    }))
+  };
+}
 
 export const tableRouter = createTRPCRouter({
   list: protectedProcedure
@@ -12,6 +36,19 @@ export const tableRouter = createTRPCRouter({
         },
         orderBy: { order: "asc" },
         select: { id: true, name: true, order: true },
+      });
+    }),
+
+  listViews: protectedProcedure
+    .input(z.object({ tableId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      return ctx.db.view.findMany({
+        where: {
+          tableId: input.tableId,
+          table: { base: { createdById: ctx.session.user.id } },
+        },
+        orderBy: { order: "asc" },
+        select: { id: true, name: true, type: true, order: true },
       });
     }),
 
@@ -62,27 +99,22 @@ export const tableRouter = createTRPCRouter({
         where: { baseId: input.baseId } 
       });
 
-      // Create table with default structure
+      // Generate fake business data
+      const fakeData = generateFakeBusinessData();
+
+      // Create table with fake data structure
       const table = await ctx.db.table.create({
         data: {
           baseId: input.baseId,
           name: `Table ${tableCount + 1}`,
           order: tableCount,
           columns: {
-            create: [
-              { name: "Name", order: 0 },
-              { name: "Notes", order: 1 },
-              { name: "Assignee", order: 2 },
-              { name: "Status", order: 3 },
-              { name: "Attachments", order: 4 }
-            ]
+            create: fakeData.columns
           },
           rows: {
-            create: [
-              { order: 0 },
-              { order: 1 },
-              { order: 2 }
-            ]
+            create: fakeData.rows.map(row => ({
+              order: row.order
+            }))
           },
           views: {
             create: [{ name: "Grid view", type: "grid", order: 0 }]
@@ -94,22 +126,33 @@ export const tableRouter = createTRPCRouter({
         }
       });
 
-      // Create cells for each row-column combination
-      const cells = [];
-      for (const row of table.rows) {
-        for (const column of table.columns) {
-          cells.push({
+      // Create cells for all rows and columns with fake data
+      const cellData = [];
+      for (let rowIndex = 0; rowIndex < fakeData.rows.length; rowIndex++) {
+        const row = fakeData.rows[rowIndex];
+        const tableRow = table.rows[rowIndex];
+        
+        if (!row || !tableRow) continue;
+        
+        for (let colIndex = 0; colIndex < fakeData.columns.length; colIndex++) {
+          const tableColumn = table.columns[colIndex];
+          if (!tableColumn) continue;
+          
+          cellData.push({
             tableId: table.id,
-            rowId: row.id,
-            columnId: column.id,
-            value: ""
+            rowId: tableRow.id,
+            columnId: tableColumn.id,
+            value: row.cells[colIndex]?.value ?? ''
           });
         }
       }
 
-      await ctx.db.tableCell.createMany({
-        data: cells
-      });
+      // Insert all cells at once
+      if (cellData.length > 0) {
+        await ctx.db.tableCell.createMany({
+          data: cellData
+        });
+      }
 
       return table;
     }),

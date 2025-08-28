@@ -31,6 +31,8 @@ declare module "next-auth" {
  * @see https://next-auth.js.org/configuration/options
  */
 export const authConfig = {
+  // Allow Auth.js to accept the current host (useful in dev when ports change)
+  trustHost: true,
   providers: [
     GoogleProvider,
   ],
