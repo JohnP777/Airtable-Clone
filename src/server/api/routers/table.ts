@@ -53,20 +53,37 @@ export const tableRouter = createTRPCRouter({
     }),
 
   getTableData: protectedProcedure
-    .input(z.object({ tableId: z.string() }))
+    .input(z.object({
+      tableId: z.string(),
+      sortRules: z.array(z.object({
+        columnId: z.string(),
+        direction: z.enum(["asc", "desc"])
+      })).optional(),
+      filterRules: z.array(z.object({
+        columnId: z.string(),
+        operator: z.string(),
+        value: z.string()
+      })).optional()
+    }))
     .query(async ({ ctx, input }) => {
       const table = await ctx.db.table.findFirst({
-        where: { 
+        where: {
           id: input.tableId,
-          base: { createdById: ctx.session.user.id }
+          base: {
+            createdById: ctx.session.user.id
+          }
         },
         include: {
-          columns: { orderBy: { order: "asc" } },
-          rows: { 
+          columns: {
+            orderBy: { order: "asc" }
+          },
+          rows: {
             orderBy: { order: "asc" },
             include: {
               cells: {
-                include: { column: true }
+                include: {
+                  column: true
+                }
               }
             }
           }
@@ -77,7 +94,110 @@ export const tableRouter = createTRPCRouter({
         throw new Error("Table not found");
       }
 
-      return table;
+      let filteredRows = [...table.rows];
+
+      // Apply filtering if filter rules are provided
+      if (input.filterRules && input.filterRules.length > 0) {
+        filteredRows = filteredRows.filter(row => {
+          return input.filterRules!.every(filterRule => {
+            const cell = row.cells.find(cell => cell.columnId === filterRule.columnId);
+            const cellValue = cell?.value || "";
+            
+            switch (filterRule.operator) {
+              case "contains":
+                return cellValue.toLowerCase().includes(filterRule.value.toLowerCase());
+              case "does not contain":
+                return !cellValue.toLowerCase().includes(filterRule.value.toLowerCase());
+              case "is":
+                return cellValue.toLowerCase() === filterRule.value.toLowerCase();
+              case "is not":
+                return cellValue.toLowerCase() !== filterRule.value.toLowerCase();
+              case "is empty":
+                return cellValue === "" || cellValue === null || cellValue === undefined;
+              case "is not empty":
+                return cellValue !== "" && cellValue !== null && cellValue !== undefined;
+              default:
+                return true;
+            }
+          });
+        });
+      }
+
+      // Apply sorting if sort rules are provided
+      if (input.sortRules && input.sortRules.length > 0) {
+        const sortedRows = [...filteredRows].sort((a, b) => {
+          // Apply each sort rule in order (hierarchy)
+          for (const sortRule of input.sortRules!) {
+            const aCell = a.cells.find(cell => cell.columnId === sortRule.columnId);
+            const bCell = b.cells.find(cell => cell.columnId === sortRule.columnId);
+            
+            const aValue = aCell?.value || "";
+            const bValue = bCell?.value || "";
+            
+            // Handle numeric values (remove $ and commas for salary)
+            const aNumeric = parseFloat(aValue.replace(/[$,]/g, ""));
+            const bNumeric = parseFloat(bValue.replace(/[$,]/g, ""));
+            
+            if (!isNaN(aNumeric) && !isNaN(bNumeric)) {
+              // Numeric comparison
+              if (aNumeric !== bNumeric) {
+                return sortRule.direction === "asc" ? aNumeric - bNumeric : bNumeric - aNumeric;
+              }
+            } else {
+              // String comparison
+              const comparison = aValue.localeCompare(bValue);
+              if (comparison !== 0) {
+                return sortRule.direction === "asc" ? comparison : -comparison;
+              }
+            }
+            // If values are equal, continue to next sort rule
+          }
+          return 0; // If all sort rules are equal, maintain original order
+        });
+        
+        // Return table with filtered and sorted rows
+        return {
+          ...table,
+          rows: sortedRows
+        };
+      }
+      
+      // Return table with filtered rows (no sorting)
+      return {
+        ...table,
+        rows: filteredRows
+      };
+    }),
+
+  applySort: protectedProcedure
+    .input(z.object({
+      tableId: z.string(),
+      sortRules: z.array(z.object({
+        columnId: z.string(),
+        direction: z.enum(["asc", "desc"])
+      }))
+    }))
+    .mutation(async ({ ctx, input }) => {
+      // Verify user owns the table
+      const table = await ctx.db.table.findFirst({
+        where: { 
+          id: input.tableId,
+          base: { createdById: ctx.session.user.id }
+        }
+      });
+
+      if (!table) {
+        throw new Error("Table not found");
+      }
+
+      // For now, we'll just return success since the sorting is applied in the query
+      // In a real implementation, you might want to store the sort rules in the database
+      // associated with the current view
+      return { 
+        success: true, 
+        sortRules: input.sortRules,
+        message: "Sort rules applied successfully"
+      };
     }),
 
   createTable: protectedProcedure

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useRef } from "react";
 import {
   useReactTable,
   getCoreRowModel,
@@ -10,6 +10,9 @@ import {
   type Row,
 } from "@tanstack/react-table";
 import { api } from "An/trpc/react";
+import { useTableContext } from "./TableContext";
+import { useSortContext } from "./SortContext";
+import { useFilterContext } from "./FilterContext";
 
 // Added strong types for table row shape and cell value
 type CellValue = { value: string; cellId?: string; columnId: string; rowId: string };
@@ -21,7 +24,10 @@ interface DataTableProps {
 
 export function DataTable({ tableId }: DataTableProps) {
   const utils = api.useUtils();
-  const { data: tableData } = api.table.getTableData.useQuery({ tableId });
+  const { sortRules } = useSortContext();
+  const { filterRules } = useFilterContext();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const currentValueRef = useRef<string>("");
   
   const [editingCell, setEditingCell] = useState<{
     rowId: string;
@@ -39,20 +45,69 @@ export function DataTable({ tableId }: DataTableProps) {
   // Local state to track cell values for immediate updates
   const [localCellValues, setLocalCellValues] = useState<Record<string, string>>({});
 
+  const { data: tableData, isLoading } = api.table.getTableData.useQuery(
+    {
+      tableId,
+      sortRules: sortRules.map(rule => ({
+        columnId: rule.columnId,
+        direction: rule.direction
+      })),
+      filterRules: filterRules.map(rule => ({
+        columnId: rule.columnId,
+        operator: rule.operator,
+        value: rule.value
+      }))
+    },
+    { enabled: !!tableId }
+  );
+
   const updateCellMutation = api.table.updateCell.useMutation({
     onMutate: async ({ tableId, rowId, columnId, value }) => {
       // Cancel any outgoing refetches
-      await utils.table.getTableData.cancel({ tableId });
+      await utils.table.getTableData.cancel({ 
+        tableId,
+        sortRules: sortRules.map(rule => ({
+          columnId: rule.columnId,
+          direction: rule.direction
+        })),
+        filterRules: filterRules.map(rule => ({
+          columnId: rule.columnId,
+          operator: rule.operator,
+          value: rule.value
+        }))
+      });
       
       // Update local state immediately for instant UI feedback
       const cellKey = `${rowId}-${columnId}`;
       setLocalCellValues(prev => ({ ...prev, [cellKey]: value }));
       
       // Snapshot the previous value
-      const previousData = utils.table.getTableData.getData({ tableId });
+      const previousData = utils.table.getTableData.getData({ 
+        tableId,
+        sortRules: sortRules.map(rule => ({
+          columnId: rule.columnId,
+          direction: rule.direction
+        })),
+        filterRules: filterRules.map(rule => ({
+          columnId: rule.columnId,
+          operator: rule.operator,
+          value: rule.value
+        }))
+      });
       
       // Optimistically update the cache
-      utils.table.getTableData.setData({ tableId }, (old) => {
+      utils.table.getTableData.setData({ 
+        tableId,
+        sortRules: sortRules.map(rule => ({
+          columnId: rule.columnId,
+          direction: rule.direction
+        })),
+        filterRules: filterRules.map(rule => ({
+          columnId: rule.columnId,
+          operator: rule.operator,
+          value: rule.value
+        }))
+      }, (old) => {
         if (!old) return old;
         
         return {
@@ -80,7 +135,18 @@ export function DataTable({ tableId }: DataTableProps) {
     onError: (err, { tableId, rowId, columnId }, _context) => {
       // If the mutation fails, use the context returned from onMutate to roll back
       if (_context?.previousData) {
-        utils.table.getTableData.setData({ tableId }, _context.previousData);
+        utils.table.getTableData.setData({ 
+          tableId,
+          sortRules: sortRules.map(rule => ({
+            columnId: rule.columnId,
+            direction: rule.direction
+          })),
+          filterRules: filterRules.map(rule => ({
+            columnId: rule.columnId,
+            operator: rule.operator,
+            value: rule.value
+          }))
+        }, _context.previousData);
       }
       // Also rollback local state
       if (_context?.previousLocalValue !== undefined) {
@@ -100,13 +166,46 @@ export function DataTable({ tableId }: DataTableProps) {
   const updateColumnMutation = api.table.updateColumn.useMutation({
     onMutate: async ({ columnId, name }) => {
       // Cancel any outgoing refetches
-      await utils.table.getTableData.cancel({ tableId });
+      await utils.table.getTableData.cancel({ 
+        tableId,
+        sortRules: sortRules.map(rule => ({
+          columnId: rule.columnId,
+          direction: rule.direction
+        })),
+        filterRules: filterRules.map(rule => ({
+          columnId: rule.columnId,
+          operator: rule.operator,
+          value: rule.value
+        }))
+      });
       
       // Snapshot the previous value
-      const previousData = utils.table.getTableData.getData({ tableId });
+      const previousData = utils.table.getTableData.getData({ 
+        tableId,
+        sortRules: sortRules.map(rule => ({
+          columnId: rule.columnId,
+          direction: rule.direction
+        })),
+        filterRules: filterRules.map(rule => ({
+          columnId: rule.columnId,
+          operator: rule.operator,
+          value: rule.value
+        }))
+      });
       
       // Optimistically update the cache
-      utils.table.getTableData.setData({ tableId }, (old) => {
+      utils.table.getTableData.setData({ 
+        tableId,
+        sortRules: sortRules.map(rule => ({
+          columnId: rule.columnId,
+          direction: rule.direction
+        })),
+        filterRules: filterRules.map(rule => ({
+          columnId: rule.columnId,
+          operator: rule.operator,
+          value: rule.value
+        }))
+      }, (old) => {
         if (!old) return old;
         
         return {
@@ -120,13 +219,22 @@ export function DataTable({ tableId }: DataTableProps) {
         };
       });
       
-      // Return a context object with the snapshotted value
-      return { previousData, columnId };
+      return { previousData };
     },
-    onError: (err, { columnId: _columnId }, context) => {
-      // If the mutation fails, use the context returned from onMutate to roll back
-      if (context?.previousData) {
-        utils.table.getTableData.setData({ tableId }, context.previousData);
+    onError: (err, { columnId, name }, _context) => {
+      if (_context?.previousData) {
+        utils.table.getTableData.setData({ 
+          tableId,
+          sortRules: sortRules.map(rule => ({
+            columnId: rule.columnId,
+            direction: rule.direction
+          })),
+          filterRules: filterRules.map(rule => ({
+            columnId: rule.columnId,
+            operator: rule.operator,
+            value: rule.value
+          }))
+        }, _context.previousData);
       }
     },
     // No onSettled - we don't want to refetch or change anything
@@ -135,13 +243,46 @@ export function DataTable({ tableId }: DataTableProps) {
   const addRowMutation = api.table.addRow.useMutation({
     onMutate: async ({ tableId }) => {
       // Cancel any outgoing refetches
-      await utils.table.getTableData.cancel({ tableId });
+      await utils.table.getTableData.cancel({ 
+        tableId,
+        sortRules: sortRules.map(rule => ({
+          columnId: rule.columnId,
+          direction: rule.direction
+        })),
+        filterRules: filterRules.map(rule => ({
+          columnId: rule.columnId,
+          operator: rule.operator,
+          value: rule.value
+        }))
+      });
       
       // Snapshot the previous value
-      const previousData = utils.table.getTableData.getData({ tableId });
+      const previousData = utils.table.getTableData.getData({ 
+        tableId,
+        sortRules: sortRules.map(rule => ({
+          columnId: rule.columnId,
+          direction: rule.direction
+        })),
+        filterRules: filterRules.map(rule => ({
+          columnId: rule.columnId,
+          operator: rule.operator,
+          value: rule.value
+        }))
+      });
       
       // Optimistically add a new row
-      utils.table.getTableData.setData({ tableId }, (old) => {
+      utils.table.getTableData.setData({ 
+        tableId,
+        sortRules: sortRules.map(rule => ({
+          columnId: rule.columnId,
+          direction: rule.direction
+        })),
+        filterRules: filterRules.map(rule => ({
+          columnId: rule.columnId,
+          operator: rule.operator,
+          value: rule.value
+        }))
+      }, (old) => {
         if (!old) return old;
         
         const tempId = `temp-${Date.now()}`;
@@ -175,12 +316,34 @@ export function DataTable({ tableId }: DataTableProps) {
     onError: (err, { tableId }, _context) => {
       // If the mutation fails, use the context returned from onMutate to roll back
       if (_context?.previousData) {
-        utils.table.getTableData.setData({ tableId }, _context.previousData);
+        utils.table.getTableData.setData({ 
+          tableId,
+          sortRules: sortRules.map(rule => ({
+            columnId: rule.columnId,
+            direction: rule.direction
+          })),
+          filterRules: filterRules.map(rule => ({
+            columnId: rule.columnId,
+            operator: rule.operator,
+            value: rule.value
+          }))
+        }, _context.previousData);
       }
     },
     onSuccess: (data, variables, _context) => {
       // Update the cache to replace temporary IDs with real IDs
-      utils.table.getTableData.setData({ tableId: variables.tableId }, (old) => {
+      utils.table.getTableData.setData({ 
+        tableId: variables.tableId,
+        sortRules: sortRules.map(rule => ({
+          columnId: rule.columnId,
+          direction: rule.direction
+        })),
+        filterRules: filterRules.map(rule => ({
+          columnId: rule.columnId,
+          operator: rule.operator,
+          value: rule.value
+        }))
+      }, (old) => {
         if (!old) return old;
         
         return {
@@ -207,13 +370,46 @@ export function DataTable({ tableId }: DataTableProps) {
   const addColumnMutation = api.table.addColumn.useMutation({
     onMutate: async ({ tableId, name }) => {
       // Cancel any outgoing refetches
-      await utils.table.getTableData.cancel({ tableId });
+      await utils.table.getTableData.cancel({ 
+        tableId,
+        sortRules: sortRules.map(rule => ({
+          columnId: rule.columnId,
+          direction: rule.direction
+        })),
+        filterRules: filterRules.map(rule => ({
+          columnId: rule.columnId,
+          operator: rule.operator,
+          value: rule.value
+        }))
+      });
       
       // Snapshot the previous value
-      const previousData = utils.table.getTableData.getData({ tableId });
+      const previousData = utils.table.getTableData.getData({ 
+        tableId,
+        sortRules: sortRules.map(rule => ({
+          columnId: rule.columnId,
+          direction: rule.direction
+        })),
+        filterRules: filterRules.map(rule => ({
+          columnId: rule.columnId,
+          operator: rule.operator,
+          value: rule.value
+        }))
+      });
       
       // Optimistically add a new column
-      utils.table.getTableData.setData({ tableId }, (old) => {
+      utils.table.getTableData.setData({ 
+        tableId,
+        sortRules: sortRules.map(rule => ({
+          columnId: rule.columnId,
+          direction: rule.direction
+        })),
+        filterRules: filterRules.map(rule => ({
+          columnId: rule.columnId,
+          operator: rule.operator,
+          value: rule.value
+        }))
+      }, (old) => {
         if (!old) return old;
         
         const tempId = `temp-col-${Date.now()}`;
@@ -258,12 +454,34 @@ export function DataTable({ tableId }: DataTableProps) {
     onError: (err, { tableId }, _context) => {
       // If the mutation fails, use the context returned from onMutate to roll back
       if (_context?.previousData) {
-        utils.table.getTableData.setData({ tableId }, _context.previousData);
+        utils.table.getTableData.setData({ 
+          tableId,
+          sortRules: sortRules.map(rule => ({
+            columnId: rule.columnId,
+            direction: rule.direction
+          })),
+          filterRules: filterRules.map(rule => ({
+            columnId: rule.columnId,
+            operator: rule.operator,
+            value: rule.value
+          }))
+        }, _context.previousData);
       }
     },
     onSuccess: (data, variables, _context) => {
       // Update the cache to replace temporary IDs with real IDs
-      utils.table.getTableData.setData({ tableId: variables.tableId }, (old) => {
+      utils.table.getTableData.setData({ 
+        tableId: variables.tableId,
+        sortRules: sortRules.map(rule => ({
+          columnId: rule.columnId,
+          direction: rule.direction
+        })),
+        filterRules: filterRules.map(rule => ({
+          columnId: rule.columnId,
+          operator: rule.operator,
+          value: rule.value
+        }))
+      }, (old) => {
         if (!old) return old;
         
         return {
@@ -409,16 +627,25 @@ export function DataTable({ tableId }: DataTableProps) {
           >
             {isEditing ? (
               <input
+                ref={inputRef}
                 type="text"
-                value={editingCell?.value ?? ""}
-                onChange={(e) => editingCell && setEditingCell({ ...editingCell, value: e.target.value })}
+                defaultValue={editingCell?.value ?? ""}
+                onChange={(e) => {
+                  // Only update the ref, don't update state during typing
+                  currentValueRef.current = e.target.value;
+                }}
                 onBlur={() => {
                   if (editingCell) {
+                    const finalValue = currentValueRef.current;
+                    // Update local state and trigger mutation only when editing is complete
+                    const cellKey = `${editingCell.rowId}-${editingCell.columnId}`;
+                    setLocalCellValues(prev => ({ ...prev, [cellKey]: finalValue }));
+                    
                     void updateCellMutation.mutate({
                       tableId,
                       rowId: editingCell.rowId,
                       columnId: editingCell.columnId,
-                      value: editingCell.value,
+                      value: finalValue,
                     });
                     setEditingCell(null);
                   }
@@ -426,11 +653,16 @@ export function DataTable({ tableId }: DataTableProps) {
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     if (editingCell) {
+                      const finalValue = currentValueRef.current;
+                      // Update local state and trigger mutation only when editing is complete
+                      const cellKey = `${editingCell.rowId}-${editingCell.columnId}`;
+                      setLocalCellValues(prev => ({ ...prev, [cellKey]: finalValue }));
+                      
                       void updateCellMutation.mutate({
                         tableId,
                         rowId: editingCell.rowId,
                         columnId: editingCell.columnId,
-                        value: editingCell.value,
+                        value: finalValue,
                       });
                       setEditingCell(null);
                     }
@@ -440,6 +672,10 @@ export function DataTable({ tableId }: DataTableProps) {
                 }}
                 className="w-full h-full bg-transparent border-none outline-none focus:ring-0 pointer-events-auto"
                 autoFocus
+                onFocus={(e) => {
+                  // Set the ref to the current value when focusing
+                  currentValueRef.current = e.target.value;
+                }}
               />
             ) : (
               <div className="w-full h-full flex items-center pointer-events-auto">
@@ -461,8 +697,12 @@ export function DataTable({ tableId }: DataTableProps) {
     getCoreRowModel: getCoreRowModel(),
   });
 
+  if (isLoading) {
+    return <div className="flex items-center justify-center h-64">Loading...</div>;
+  }
+
   if (!tableData) {
-    return null;
+    return <div className="flex items-center justify-center h-64">No data available</div>;
   }
 
   return (
