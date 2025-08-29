@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useRef } from "react";
+import React, { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import {
   useReactTable,
   getCoreRowModel,
@@ -13,6 +13,8 @@ import { api } from "An/trpc/react";
 import { useTableContext } from "./TableContext";
 import { useSortContext } from "./SortContext";
 import { useFilterContext } from "./FilterContext";
+import { useSearchContext } from "./SearchContext";
+import { useHiddenFields } from "./HiddenFieldsContext";
 
 // Added strong types for table row shape and cell value
 type CellValue = { value: string; cellId?: string; columnId: string; rowId: string };
@@ -26,6 +28,8 @@ export function DataTable({ tableId }: DataTableProps) {
   const utils = api.useUtils();
   const { sortRules } = useSortContext();
   const { filterRules } = useFilterContext();
+  const { searchResults, currentResultIndex } = useSearchContext();
+  const { isFieldHidden } = useHiddenFields();
   const inputRef = useRef<HTMLInputElement>(null);
   const currentValueRef = useRef<string>("");
   
@@ -521,6 +525,81 @@ export function DataTable({ tableId }: DataTableProps) {
     // No onSettled - we don't want to refetch or change anything
   });
 
+  // Helper function to check if a cell should be highlighted
+  const isCellHighlighted = useCallback((rowId: string, columnId: string) => {
+    return searchResults.some(result => 
+      result.type === "cell" && 
+      result.rowId === rowId && 
+      result.columnId === columnId
+    );
+  }, [searchResults]);
+
+  // Helper function to check if current cell is the active search result
+  const isCurrentSearchResult = useCallback((rowId: string, columnId: string) => {
+    if (searchResults.length === 0 || currentResultIndex >= searchResults.length) return false;
+    const currentResult = searchResults[currentResultIndex];
+    if (!currentResult) return false;
+    return currentResult.type === "cell" && 
+           currentResult.rowId === rowId && 
+           currentResult.columnId === columnId;
+  }, [searchResults, currentResultIndex]);
+
+  // Scroll to current search result when it changes
+  useEffect(() => {
+    if (searchResults.length > 0 && currentResultIndex < searchResults.length) {
+      const currentResult = searchResults[currentResultIndex];
+      
+      if (currentResult?.type === "cell") {
+        // Find the cell element and scroll to it
+        const cellElement = document.querySelector(
+          `[data-row-id="${currentResult.rowId}"][data-column-id="${currentResult.columnId}"]`
+        );
+        
+        if (cellElement) {
+          // Use scrollIntoView with a simpler approach
+          console.log('Scrolling to cell:', currentResult.rowId, currentResult.columnId);
+          cellElement.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center',
+            inline: 'nearest'
+          });
+        }
+      } else if (currentResult?.type === "field") {
+        // Find the field header element and scroll to it
+        const fieldElement = document.querySelector(
+          `[data-field-id="${currentResult.columnId}"]`
+        );
+        
+        if (fieldElement) {
+          // Use scrollIntoView with a simpler approach
+          console.log('Scrolling to field:', currentResult.columnId);
+          fieldElement.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center',
+            inline: 'nearest'
+          });
+        }
+      }
+    }
+  }, [currentResultIndex, searchResults]);
+
+  // Helper function to check if a field (column) should be highlighted
+  const isFieldHighlighted = useCallback((columnId: string) => {
+    return searchResults.some(result => 
+      result.type === "field" && 
+      result.columnId === columnId
+    );
+  }, [searchResults]);
+
+  // Helper function to check if current field is the active search result
+  const isCurrentFieldResult = useCallback((columnId: string) => {
+    if (searchResults.length === 0 || currentResultIndex >= searchResults.length) return false;
+    const currentResult = searchResults[currentResultIndex];
+    if (!currentResult) return false;
+    return currentResult.type === "field" && 
+           currentResult.columnId === columnId;
+  }, [searchResults, currentResultIndex]);
+
   // Transform data for TanStack Table
   const tableRows = useMemo(() => {
     if (!tableData) return [] as RowRecord[];
@@ -562,28 +641,28 @@ export function DataTable({ tableId }: DataTableProps) {
       size: 60, // Narrow column for row numbers
     };
 
-    // Create data columns
-    const dataColumns = tableData.columns.map((column: { id: string; name: string }) => ({
+    // Create data columns (filter out hidden columns)
+    const dataColumns = tableData.columns
+      .filter((column: { id: string; name: string }) => !isFieldHidden(column.id))
+      .map((column: { id: string; name: string }) => ({
       id: column.id,
-      header: () => (
-        <div className={`px-2 py-2 font-medium text-gray-900 w-full h-full flex items-center`}>
-          {editingColumn?.columnId === column.id ? (
-            <input
-              type="text"
-              value={editingColumn?.name ?? ""}
-              onChange={(e) => setEditingColumn((prev) => (prev ? { ...prev, name: e.target.value } : prev))}
-              onBlur={() => {
-                setEditingColumn((prev) => {
-                  if (!prev) return prev;
-                  void updateColumnMutation.mutate({
-                    columnId: prev.columnId,
-                    name: prev.name,
-                  });
-                  return null;
-                });
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
+      size: 200, // Fixed width for data columns
+      header: () => {
+        const isHighlighted = isFieldHighlighted(column.id);
+        const isCurrent = isCurrentFieldResult(column.id);
+        
+        return (
+          <div 
+            data-field-id={column.id}
+            className={`px-2 py-2 font-medium text-gray-900 w-full h-full flex items-center ${
+              isCurrent ? 'bg-orange-300' : isHighlighted ? 'bg-orange-100' : ''
+            }`}>
+            {editingColumn?.columnId === column.id ? (
+              <input
+                type="text"
+                value={editingColumn?.name ?? ""}
+                onChange={(e) => setEditingColumn((prev) => (prev ? { ...prev, name: e.target.value } : prev))}
+                onBlur={() => {
                   setEditingColumn((prev) => {
                     if (!prev) return prev;
                     void updateColumnMutation.mutate({
@@ -592,31 +671,50 @@ export function DataTable({ tableId }: DataTableProps) {
                     });
                     return null;
                   });
-                } else if (e.key === "Escape") {
-                  setEditingColumn(null);
-                }
-              }}
-              className="w-full h-full bg-transparent border-none outline-none focus:ring-0 font-medium"
-              autoFocus
-            />
-          ) : (
-            <div
-              onDoubleClick={() => setEditingColumn({ columnId: column.id, name: column.name })}
-              className="cursor-pointer truncate"
-            >
-              {column.name}
-            </div>
-          )}
-        </div>
-      ),
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    setEditingColumn((prev) => {
+                      if (!prev) return prev;
+                      void updateColumnMutation.mutate({
+                        columnId: prev.columnId,
+                        name: prev.name,
+                      });
+                      return null;
+                    });
+                  } else if (e.key === "Escape") {
+                    setEditingColumn(null);
+                  }
+                }}
+                className="w-full h-full bg-transparent border-none outline-none focus:ring-0 font-medium"
+                autoFocus
+              />
+            ) : (
+              <div
+                onDoubleClick={() => setEditingColumn({ columnId: column.id, name: column.name })}
+                className="cursor-pointer truncate"
+              >
+                {column.name}
+              </div>
+            )}
+          </div>
+        );
+      },
       accessorKey: column.id,
       cell: ({ row, column }: { row: Row<RowRecord>; column: Column<RowRecord, CellValue> }) => {
         const cellData = row.getValue<CellValue>(column.id);
         const isEditing = editingCell?.rowId === cellData.rowId && editingCell?.columnId === cellData.columnId;
 
+        const isHighlighted = isCellHighlighted(cellData.rowId, cellData.columnId);
+        const isCurrent = isCurrentSearchResult(cellData.rowId, cellData.columnId);
+        
         return (
           <div 
-            className="px-2 py-2 cursor-pointer w-full h-full flex items-center pointer-events-none"
+            data-row-id={cellData.rowId}
+            data-column-id={cellData.columnId}
+            className={`px-2 py-2 cursor-pointer w-full h-full flex items-center pointer-events-none ${
+              isCurrent ? 'bg-orange-300' : isHighlighted ? 'bg-orange-100' : ''
+            }`}
             onDoubleClick={() => {
               setEditingCell({
                 rowId: cellData.rowId,
@@ -689,12 +787,13 @@ export function DataTable({ tableId }: DataTableProps) {
 
     // Return row number column + data columns
     return [rowNumberColumn, ...dataColumns];
-  }, [tableData, editingColumn, editingCell, updateColumnMutation, updateCellMutation, tableId, localCellValues]);
+  }, [tableData, editingColumn, editingCell, updateColumnMutation, updateCellMutation, tableId, localCellValues, isCellHighlighted, isCurrentSearchResult, isFieldHighlighted, isCurrentFieldResult]);
 
   const table = useReactTable({
     data: tableRows,
     columns,
     getCoreRowModel: getCoreRowModel(),
+    columnResizeMode: "onChange",
   });
 
   if (isLoading) {
@@ -706,14 +805,17 @@ export function DataTable({ tableId }: DataTableProps) {
   }
 
   return (
-    <div className="w-full h-full flex flex-col">
-      <div className="flex-1 overflow-auto">
-        <table className="w-full border-collapse border border-gray-200">
+    <div className="w-full">
+      <table className="border-collapse border border-gray-200 table-fixed">
           <thead className="bg-gray-50 sticky top-0">
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id} className="h-12">
                 {headerGroup.headers.map((header) => (
-                  <th key={header.id} className="border border-gray-200 h-12">
+                  <th 
+                    key={header.id} 
+                    className="border border-gray-200 h-12"
+                    style={{ width: header.getSize() }}
+                  >
                     {flexRender(header.column.columnDef.header, header.getContext())}
                   </th>
                 ))}
@@ -732,7 +834,11 @@ export function DataTable({ tableId }: DataTableProps) {
             {table.getRowModel().rows.map((row) => (
               <tr key={row.id} className="hover:bg-gray-100 transition-colors duration-150 h-12">
                 {row.getVisibleCells().map((cell) => (
-                  <td key={cell.id} className="border border-gray-200 h-12">
+                  <td 
+                    key={cell.id} 
+                    className="border border-gray-200 h-12"
+                    style={{ width: cell.column.getSize() }}
+                  >
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </td>
                 ))}
@@ -753,7 +859,6 @@ export function DataTable({ tableId }: DataTableProps) {
             </tr>
           </tbody>
         </table>
-      </div>
     </div>
   );
 } 

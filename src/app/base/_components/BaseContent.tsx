@@ -35,8 +35,10 @@ export function BaseContent({ baseId }: BaseContentProps) {
       <div className="w-56 shrink-0 border-r border-gray-200 bg-white">
         <ViewSidebar tableId={selectedTable.id} />
       </div>
-      <div className="flex-1 p-4">
-        <DataTable tableId={selectedTable.id} />
+      <div className="flex-1 overflow-auto">
+        <div className="p-4">
+          <DataTable tableId={selectedTable.id} />
+        </div>
       </div>
     </div>
   );

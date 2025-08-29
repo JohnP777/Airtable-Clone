@@ -5,6 +5,8 @@ import { api } from "An/trpc/react";
 import { useTableContext } from "./TableContext";
 import { useSortContext } from "./SortContext";
 import { useFilterContext } from "./FilterContext";
+import { SearchButton } from "./SearchButton";
+import { HideFieldsButton } from "./HideFieldsButton";
 
 interface SortRule {
   id: string;
@@ -316,6 +318,8 @@ export function FilterSortButtons() {
 
   return (
     <div className="flex items-center space-x-2 relative">
+      <HideFieldsButton tableId={selectedTableId!} />
+      
       <div className="relative">
         <button
           onClick={handleFilter}
@@ -666,6 +670,8 @@ export function FilterSortButtons() {
           </div>
         )}
       </div>
+      
+      <SearchButton />
       
       {/* Click outside to close dropdowns */}
       {(showSortDropdown || showFilterDropdown) && (
