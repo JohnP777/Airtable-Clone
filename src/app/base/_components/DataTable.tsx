@@ -556,7 +556,6 @@ export function DataTable({ tableId }: DataTableProps) {
         );
         
         if (cellElement) {
-          // Use scrollIntoView with a simpler approach
           console.log('Scrolling to cell:', currentResult.rowId, currentResult.columnId);
           cellElement.scrollIntoView({
             behavior: 'smooth',
