@@ -65,8 +65,8 @@ export function DataTable({ tableId }: DataTableProps) {
     },
     { 
       enabled: !!tableId,
-      // Limit the data to prevent memory issues
-      staleTime: 30000, // Cache for 30 seconds
+      // Very short stale time for immediate updates
+      staleTime: 0, // No caching - always fetch fresh data
     }
   );
 
@@ -249,8 +249,28 @@ export function DataTable({ tableId }: DataTableProps) {
     // No onSettled - we don't want to refetch or change anything
   });
 
-  // AddRowButton component handles the add row functionality
-  // Removed addRowMutation to use the AddRowButton component instead
+  const addRowMutation = api.table.addRow.useMutation({
+    onSuccess: () => {
+      // Force immediate refresh of table data
+      console.log("Single row added, invalidating cache...");
+      
+      void utils.table.getTableData.invalidate({ 
+        tableId,
+        sortRules: sortRules.map(rule => ({
+          columnId: rule.columnId,
+          direction: rule.direction
+        })),
+        filterRules: filterRules.map(rule => ({
+          columnId: rule.columnId,
+          operator: rule.operator,
+          value: rule.value
+        }))
+      });
+      
+      // Also invalidate all table data queries for this table
+      void utils.table.getTableData.invalidate();
+    },
+  });
 
   const addColumnMutation = api.table.addColumn.useMutation({
     onMutate: async ({ tableId, name }) => {
@@ -729,7 +749,17 @@ export function DataTable({ tableId }: DataTableProps) {
                 colSpan={tableData.columns.length + 3}
                 className="border border-gray-200 bg-gray-50 h-12"
               >
-                <AddRowButton className="w-full" />
+                <button
+                  onClick={() => {
+                    if (!tableId) return;
+                    void addRowMutation.mutate({ tableId });
+                  }}
+                  disabled={addRowMutation.isPending}
+                  className="w-full px-3 py-1 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  title="Add a new row"
+                >
+                  {addRowMutation.isPending ? "Adding..." : "+"}
+                </button>
               </td>
             </tr>
           </tbody>

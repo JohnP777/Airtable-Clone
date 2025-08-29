@@ -135,15 +135,14 @@ export const tableRouter = createTRPCRouter({
             orderBy: { order: "asc" }
           },
           rows: {
-            orderBy: { order: "asc" },
-            take: 1000, // Limit to 1000 rows to prevent memory issues
+        orderBy: { order: "asc" },
+        include: {
+          cells: {
             include: {
-              cells: {
-                include: {
-                  column: true
-                }
-              }
+              column: true
             }
+          }
+        }
           }
         }
       });
@@ -441,14 +440,19 @@ export const tableRouter = createTRPCRouter({
         throw new Error("Table not found");
       }
 
-      const rowCount = await ctx.db.tableRow.count({ 
-        where: { tableId: input.tableId } 
+      // Find the next available order number to avoid conflicts
+      const maxOrderRow = await ctx.db.tableRow.findFirst({
+        where: { tableId: input.tableId },
+        orderBy: { order: "desc" },
+        select: { order: true }
       });
+      
+      const nextOrder = (maxOrderRow?.order ?? -1) + 1;
 
       const row = await ctx.db.tableRow.create({
         data: {
           tableId: input.tableId,
-          order: rowCount
+          order: nextOrder
         }
       });
 
@@ -565,7 +569,7 @@ export const tableRouter = createTRPCRouter({
   addBulkRows: protectedProcedure
     .input(z.object({ 
       tableId: z.string(),
-      rowCount: z.number().min(1).max(1000) // Reduced from 10000 to 1000
+      rowCount: z.number().min(1).max(10000)
     }))
     .mutation(async ({ ctx, input }) => {
       // Verify user owns the table
@@ -658,7 +662,7 @@ export const tableRouter = createTRPCRouter({
   addBulkRowsFast: protectedProcedure
     .input(z.object({ 
       tableId: z.string(),
-      rowCount: z.number().min(1).max(1000)
+      rowCount: z.number().min(1).max(10000)
     }))
     .mutation(async ({ ctx, input }) => {
       // Verify user owns the table
@@ -676,8 +680,14 @@ export const tableRouter = createTRPCRouter({
         throw new Error("Table not found");
       }
 
-      const currentRowCount = await ctx.db.tableRow.count({ where: { tableId: input.tableId } });
-      const startOrder = currentRowCount;
+      // Find the next available order number to ensure proper sequencing
+      const maxOrderRow = await ctx.db.tableRow.findFirst({
+        where: { tableId: input.tableId },
+        orderBy: { order: "desc" },
+        select: { order: true }
+      });
+      
+      const startOrder = (maxOrderRow?.order ?? -1) + 1;
 
       // Generate fake data for existing columns
       const fakeData = generateFakeDataForColumns(table.columns, input.rowCount);
@@ -689,7 +699,7 @@ export const tableRouter = createTRPCRouter({
       for (let i = 0; i < input.rowCount; i += batchSize) {
         const batch = fakeData.slice(i, i + batchSize);
         
-        // Create rows for this batch
+        // Create rows for this batch with sequential ordering
         const rowData = batch.map((row, index) => ({
           tableId: input.tableId,
           order: startOrder + i + index
@@ -701,7 +711,7 @@ export const tableRouter = createTRPCRouter({
 
         // Get the created row IDs for this batch
         const rowIds = await ctx.db.tableRow.findMany({
-          where: { 
+          where: {
             tableId: input.tableId,
             order: { gte: startOrder + i, lt: startOrder + i + batch.length }
           },
@@ -745,7 +755,7 @@ export const tableRouter = createTRPCRouter({
       return { 
         success: true, 
         addedRows: totalCreatedRows,
-        totalRows: currentRowCount + totalCreatedRows
+        totalRows: startOrder + totalCreatedRows
       };
     }),
 
