@@ -16,6 +16,8 @@ export function BaseSidebar() {
           <Image src="/10.PNG" alt="Home" width={33} height={33} />
         </Link>
       </div>
+      
+
     </aside>
   );
 } 

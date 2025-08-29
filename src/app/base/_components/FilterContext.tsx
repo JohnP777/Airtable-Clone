@@ -1,7 +1,8 @@
 "use client";
 
-import React, { createContext, useContext, useState } from "react";
+import React, { createContext, useContext, useState, useEffect } from "react";
 import type { ReactNode } from "react";
+import { useView } from "./ViewContext";
 
 interface FilterRule {
   id: string;
@@ -26,7 +27,22 @@ interface FilterProviderProps {
 }
 
 export function FilterProvider({ children }: FilterProviderProps) {
+  const { currentView, updateView } = useView();
   const [filterRules, setFilterRules] = useState<FilterRule[]>([]);
+
+  // Sync with current view's filter rules
+  useEffect(() => {
+    if (currentView) {
+      setFilterRules(currentView.filterRules);
+    }
+  }, [currentView?.id]);
+
+  // Update view when filter rules change
+  useEffect(() => {
+    if (currentView) {
+      updateView(currentView.id, { filterRules });
+    }
+  }, [filterRules, currentView?.id]);
 
   const addFilterRule = (rule: FilterRule) => {
     setFilterRules(prev => [...prev, rule]);

@@ -1,6 +1,7 @@
 "use client";
 
-import React, { createContext, useContext, useState, ReactNode } from "react";
+import React, { createContext, useContext, useState, ReactNode, useEffect } from "react";
+import { useView } from "./ViewContext";
 
 interface SortRule {
   id: string;
@@ -26,7 +27,22 @@ interface SortProviderProps {
 }
 
 export function SortProvider({ children }: SortProviderProps) {
+  const { currentView, updateView } = useView();
   const [sortRules, setSortRules] = useState<SortRule[]>([]);
+
+  // Sync with current view's sort rules
+  useEffect(() => {
+    if (currentView) {
+      setSortRules(currentView.sortRules);
+    }
+  }, [currentView?.id]);
+
+  // Update view when sort rules change
+  useEffect(() => {
+    if (currentView) {
+      updateView(currentView.id, { sortRules });
+    }
+  }, [sortRules, currentView?.id]);
 
   const addSortRule = (rule: SortRule) => {
     setSortRules(prev => [...prev, rule]);

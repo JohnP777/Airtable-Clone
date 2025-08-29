@@ -1,6 +1,7 @@
 "use client";
 
-import React, { createContext, useContext, useState, ReactNode } from "react";
+import React, { createContext, useContext, useState, ReactNode, useEffect } from "react";
+import { useView } from "./ViewContext";
 
 interface HiddenFieldsContextType {
   hiddenFields: Set<string>;
@@ -27,7 +28,22 @@ interface HiddenFieldsProviderProps {
 }
 
 export function HiddenFieldsProvider({ children }: HiddenFieldsProviderProps) {
+  const { currentView, updateView } = useView();
   const [hiddenFields, setHiddenFields] = useState<Set<string>>(new Set());
+
+  // Sync with current view's hidden fields
+  useEffect(() => {
+    if (currentView) {
+      setHiddenFields(currentView.hiddenFields);
+    }
+  }, [currentView?.id]);
+
+  // Update view when hidden fields change
+  useEffect(() => {
+    if (currentView) {
+      updateView(currentView.id, { hiddenFields });
+    }
+  }, [hiddenFields, currentView?.id]);
 
   const hideField = (fieldId: string) => {
     setHiddenFields(prev => new Set([...prev, fieldId]));

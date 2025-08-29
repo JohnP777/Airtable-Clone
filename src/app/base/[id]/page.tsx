@@ -9,6 +9,7 @@ import { SortProvider } from "../_components/SortContext";
 import { FilterProvider } from "../_components/FilterContext";
 import { SearchProvider } from "../_components/SearchContext";
 import { HiddenFieldsProvider } from "../_components/HiddenFieldsContext";
+import { ViewProvider } from "../_components/ViewContext";
 import { FilterSortButtons } from "../_components/FilterSortButtons";
 
 export default async function BasePage({ params, }: { params: Promise<{ id: string }>; }) {
@@ -18,11 +19,12 @@ export default async function BasePage({ params, }: { params: Promise<{ id: stri
 
   return (
     <TableProvider baseId={id}>
-      <SortProvider>
-        <FilterProvider>
-          <SearchProvider>
-            <HiddenFieldsProvider>
-              <div className="h-screen bg-[#f9fafb] flex flex-col">
+      <ViewProvider baseId={id}>
+        <SortProvider>
+          <FilterProvider>
+            <SearchProvider>
+              <HiddenFieldsProvider>
+                <div className="h-screen bg-[#f9fafb] flex flex-col">
               <BaseHeader />
               {/* Secondary banner with table buttons */}
               <div className="h-8 bg-[#e6fce8] border-b border-gray-200 flex items-center shrink-0">
@@ -30,9 +32,8 @@ export default async function BasePage({ params, }: { params: Promise<{ id: stri
                   <TableButtonsWrapper baseId={id} />
                 </div>
               </div>
-              {/* Third header bar with Filter and Sort buttons */}
-              <div className="h-8 bg-gray-100 border-b border-gray-200 flex items-center justify-between shrink-0">
-                <div className="ml-14"></div>
+              {/* Third header bar with Filter/Sort buttons */}
+              <div className="h-8 bg-gray-100 border-b border-gray-200 flex items-center justify-end shrink-0">
                 <div className="flex items-center space-x-2 pr-4">
                   <FilterSortButtons />
                 </div>
@@ -46,6 +47,7 @@ export default async function BasePage({ params, }: { params: Promise<{ id: stri
         </SearchProvider>
         </FilterProvider>
       </SortProvider>
+        </ViewProvider>
     </TableProvider>
   );
 } 

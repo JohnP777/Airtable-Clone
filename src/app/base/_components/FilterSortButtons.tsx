@@ -5,6 +5,7 @@ import { api } from "An/trpc/react";
 import { useTableContext } from "./TableContext";
 import { useSortContext } from "./SortContext";
 import { useFilterContext } from "./FilterContext";
+import { useView } from "./ViewContext";
 import { SearchButton } from "./SearchButton";
 import { HideFieldsButton } from "./HideFieldsButton";
 
@@ -25,6 +26,7 @@ export function FilterSortButtons() {
   const { selectedTableId } = useTableContext();
   const { sortRules, setSortRules, addSortRule, removeSortRule, updateSortRule, moveSortRuleUp, moveSortRuleDown } = useSortContext();
   const { filterRules, addFilterRule, removeFilterRule, updateFilterRule } = useFilterContext();
+  const { createView, views } = useView();
   const [showSortDropdown, setShowSortDropdown] = useState(false);
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const [autoSortEnabled, setAutoSortEnabled] = useState(true);
