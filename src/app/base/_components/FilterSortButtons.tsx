@@ -1,13 +1,14 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { api } from "An/trpc/react";
+import { api } from "../../../trpc/react";
 import { useTableContext } from "./TableContext";
 import { useSortContext } from "./SortContext";
 import { useFilterContext } from "./FilterContext";
 import { useView } from "./ViewContext";
 import { SearchButton } from "./SearchButton";
 import { HideFieldsButton } from "./HideFieldsButton";
+import { BulkAddRowsButton } from "./BulkAddRowsButton";
 
 interface SortRule {
   id: string;
@@ -324,6 +325,7 @@ export function FilterSortButtons() {
 
   return (
     <div className="flex items-center space-x-2 relative">
+      <BulkAddRowsButton />
       <HideFieldsButton tableId={selectedTableId!} />
       
       <div className="relative">

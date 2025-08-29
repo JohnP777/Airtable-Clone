@@ -9,12 +9,13 @@ import {
   type Column,
   type Row,
 } from "@tanstack/react-table";
-import { api } from "An/trpc/react";
+import { api } from "../../../trpc/react";
 import { useTableContext } from "./TableContext";
 import { useSortContext } from "./SortContext";
 import { useFilterContext } from "./FilterContext";
 import { useSearchContext } from "./SearchContext";
 import { useHiddenFields } from "./HiddenFieldsContext";
+import { AddRowButton } from "./AddRowButton";
 
 // Added strong types for table row shape and cell value
 type CellValue = { value: string; cellId?: string; columnId: string; rowId: string };
@@ -62,7 +63,11 @@ export function DataTable({ tableId }: DataTableProps) {
         value: rule.value
       }))
     },
-    { enabled: !!tableId }
+    { 
+      enabled: !!tableId,
+      // Limit the data to prevent memory issues
+      staleTime: 30000, // Cache for 30 seconds
+    }
   );
 
   const updateCellMutation = api.table.updateCell.useMutation({
@@ -244,132 +249,8 @@ export function DataTable({ tableId }: DataTableProps) {
     // No onSettled - we don't want to refetch or change anything
   });
 
-  const addRowMutation = api.table.addRow.useMutation({
-    onMutate: async ({ tableId }) => {
-      // Cancel any outgoing refetches
-      await utils.table.getTableData.cancel({ 
-        tableId,
-        sortRules: sortRules.map(rule => ({
-          columnId: rule.columnId,
-          direction: rule.direction
-        })),
-        filterRules: filterRules.map(rule => ({
-          columnId: rule.columnId,
-          operator: rule.operator,
-          value: rule.value
-        }))
-      });
-      
-      // Snapshot the previous value
-      const previousData = utils.table.getTableData.getData({ 
-        tableId,
-        sortRules: sortRules.map(rule => ({
-          columnId: rule.columnId,
-          direction: rule.direction
-        })),
-        filterRules: filterRules.map(rule => ({
-          columnId: rule.columnId,
-          operator: rule.operator,
-          value: rule.value
-        }))
-      });
-      
-      // Optimistically add a new row
-      utils.table.getTableData.setData({ 
-        tableId,
-        sortRules: sortRules.map(rule => ({
-          columnId: rule.columnId,
-          direction: rule.direction
-        })),
-        filterRules: filterRules.map(rule => ({
-          columnId: rule.columnId,
-          operator: rule.operator,
-          value: rule.value
-        }))
-      }, (old) => {
-        if (!old) return old;
-        
-        const tempId = `temp-${Date.now()}`;
-        const newRow = {
-          id: tempId,
-          order: old.rows.length,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          tableId: tableId,
-          cells: old.columns.map(column => ({
-            id: `temp-cell-${Date.now()}-${column.id}`,
-            value: "",
-            columnId: column.id,
-            rowId: tempId,
-            tableId: tableId,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-            column: column
-          }))
-        };
-        
-        return {
-          ...old,
-          rows: [...old.rows, newRow]
-        };
-      });
-      
-      // Return a context object with the snapshotted value
-      return { previousData, tempId: `temp-${Date.now()}` };
-    },
-    onError: (err, { tableId }, _context) => {
-      // If the mutation fails, use the context returned from onMutate to roll back
-      if (_context?.previousData) {
-        utils.table.getTableData.setData({ 
-          tableId,
-          sortRules: sortRules.map(rule => ({
-            columnId: rule.columnId,
-            direction: rule.direction
-          })),
-          filterRules: filterRules.map(rule => ({
-            columnId: rule.columnId,
-            operator: rule.operator,
-            value: rule.value
-          }))
-        }, _context.previousData);
-      }
-    },
-    onSuccess: (data, variables, _context) => {
-      // Update the cache to replace temporary IDs with real IDs
-      utils.table.getTableData.setData({ 
-        tableId: variables.tableId,
-        sortRules: sortRules.map(rule => ({
-          columnId: rule.columnId,
-          direction: rule.direction
-        })),
-        filterRules: filterRules.map(rule => ({
-          columnId: rule.columnId,
-          operator: rule.operator,
-          value: rule.value
-        }))
-      }, (old) => {
-        if (!old) return old;
-        
-        return {
-          ...old,
-          rows: old.rows.map(row => {
-            if (row.id.startsWith('temp-')) {
-              return {
-                ...row,
-                id: data.id,
-                cells: row.cells.map(cell => ({
-                  ...cell,
-                  rowId: data.id
-                }))
-              };
-            }
-            return row;
-          })
-        };
-      });
-    },
-    // No onSettled - we don't want to refetch or change anything
-  });
+  // AddRowButton component handles the add row functionality
+  // Removed addRowMutation to use the AddRowButton component instead
 
   const addColumnMutation = api.table.addColumn.useMutation({
     onMutate: async ({ tableId, name }) => {
@@ -848,12 +729,7 @@ export function DataTable({ tableId }: DataTableProps) {
                 colSpan={tableData.columns.length + 3}
                 className="border border-gray-200 bg-gray-50 h-12"
               >
-                <button
-                  onClick={() => void addRowMutation.mutate({ tableId })}
-                  className="w-full px-3 py-1 text-gray-500 hover:text-gray-700 hover:bg-gray-100 text-sm"
-                >
-                  +
-                </button>
+                <AddRowButton className="w-full" />
               </td>
             </tr>
           </tbody>

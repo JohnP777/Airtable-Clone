@@ -1,7 +1,7 @@
-import { postRouter } from "An/server/api/routers/post";
-import { baseRouter } from "An/server/api/routers/base";
-import { createCallerFactory, createTRPCRouter } from "An/server/api/trpc";
-import { tableRouter } from "An/server/api/routers/table";
+import { postRouter } from "./routers/post";
+import { baseRouter } from "./routers/base";
+import { createCallerFactory, createTRPCRouter } from "./trpc";
+import { tableRouter } from "./routers/table";
 
 /**
  * This is the primary router for your server.

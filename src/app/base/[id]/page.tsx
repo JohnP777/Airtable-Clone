@@ -1,4 +1,4 @@
-import { auth } from "An/server/auth";
+import { auth } from "../../../server/auth";
 import { redirect } from "next/navigation";
 import { BaseHeader } from "../_components/BaseHeader";
 import { BaseSidebar } from "../_components/BaseSidebar";

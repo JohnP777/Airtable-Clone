@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { api } from "An/trpc/react";
+import { api } from "../../../trpc/react";
 import { useTableContext } from "./TableContext";
 import { useSearchContext } from "./SearchContext";
 

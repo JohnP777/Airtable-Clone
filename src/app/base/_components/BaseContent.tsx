@@ -1,7 +1,7 @@
 "use client";
 
-import React from "react";
-import { api } from "An/trpc/react";
+import React, { useState, useEffect } from "react";
+import { api } from "../../../trpc/react";
 import { DataTable } from "./DataTable";
 import { ViewSidebar } from "./ViewSidebar";
 import { useTableContext } from "./TableContext";
@@ -13,6 +13,23 @@ interface BaseContentProps {
 export function BaseContent({ baseId }: BaseContentProps) {
   const { data: tables, isLoading } = api.table.list.useQuery({ baseId });
   const { selectedTableId } = useTableContext();
+  const [useVirtualizedTable, setUseVirtualizedTable] = useState(false);
+
+  // For now, use regular table. Virtualization can be added later
+  // const { data: tableData } = api.table.getTableData.useQuery(
+  //   { tableId: selectedTableId! },
+  //   { 
+  //     enabled: !!selectedTableId,
+  //     staleTime: 30000, // Cache for 30 seconds
+  //   }
+  // );
+
+  // useEffect(() => {
+  //   if (tableData?.rows) {
+  //     // Use virtualized table if there are more than 1000 rows
+  //     setUseVirtualizedTable(tableData.rows.length > 1000);
+  //   }
+  // }, [tableData?.rows]);
 
   if (isLoading) {
     return null;

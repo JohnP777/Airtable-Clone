@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { api } from "An/trpc/react";
+import { api } from "../../../trpc/react";
 
 interface TableButtonsProps {
   baseId: string;

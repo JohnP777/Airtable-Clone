@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from "react";
 import type { ReactNode } from "react";
-import { api } from "An/trpc/react";
+import { api } from "../../../trpc/react";
 
 interface TableContextType {
   selectedTableId: string | undefined;

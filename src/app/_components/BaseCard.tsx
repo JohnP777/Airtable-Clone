@@ -3,7 +3,7 @@
 import React, { useState, useRef } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { api } from "An/trpc/react";
+import { api } from "../../trpc/react";
 
 interface BaseCardProps {
   base: {

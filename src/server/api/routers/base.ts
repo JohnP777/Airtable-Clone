@@ -8,18 +8,14 @@ function generateFakeBusinessData() {
     columns: [
       { name: "Employee Name", order: 0 },
       { name: "Department", order: 1 },
-      { name: "Email", order: 2 },
-      { name: "Salary", order: 3 },
-      { name: "Start Date", order: 4 }
+      { name: "Email", order: 2 }
     ],
-    rows: Array.from({ length: 100 }, (_, index) => ({
+    rows: Array.from({ length: 5 }, (_, index) => ({
       order: index,
       cells: [
         { value: faker.person.fullName() },
         { value: faker.helpers.arrayElement(['Engineering', 'Marketing', 'Sales', 'HR', 'Finance', 'Operations', 'Design', 'Product']) },
-        { value: faker.internet.email() },
-        { value: `$${faker.number.int({ min: 45000, max: 180000 }).toLocaleString()}` },
-        { value: faker.date.past({ years: 3 }).toLocaleDateString() }
+        { value: faker.internet.email() }
       ]
     }))
   };
@@ -161,12 +157,74 @@ export const baseRouter = createTRPCRouter({
       id: z.string(),
     }))
     .mutation(async ({ ctx, input }) => {
-      await ctx.db.base.delete({
+      // Since we have cascade deletes in the schema, we can just delete the base
+      // and all related data will be automatically deleted
+      const deletedBase = await ctx.db.base.delete({
         where: {
           id: input.id,
           createdById: ctx.session.user.id,
         },
       });
-      return { success: true };
+      
+      return { success: true, deletedBase };
+    }),
+
+  // Add a cleanup function to help manage database space
+  cleanup: protectedProcedure
+    .mutation(async ({ ctx }) => {
+      // Get database size info
+      const tableCounts = await ctx.db.$transaction([
+        ctx.db.base.count(),
+        ctx.db.table.count(),
+        ctx.db.tableRow.count(),
+        ctx.db.tableCell.count(),
+      ]);
+      
+      return {
+        bases: tableCounts[0],
+        tables: tableCounts[1],
+        rows: tableCounts[2],
+        cells: tableCounts[3],
+      };
+    }),
+
+  // Emergency cleanup for large datasets
+  emergencyCleanup: protectedProcedure
+    .mutation(async ({ ctx }) => {
+      const userId = ctx.session.user.id;
+      
+      // Get all bases for the user
+      const bases = await ctx.db.base.findMany({
+        where: { createdById: userId },
+        include: {
+          tables: {
+            include: {
+              _count: {
+                select: {
+                  rows: true,
+                  cells: true
+                }
+              }
+            }
+          }
+        }
+      });
+      
+      const results = [];
+      
+      for (const base of bases) {
+        const totalRows = base.tables.reduce((sum, table) => sum + table._count.rows, 0);
+        const totalCells = base.tables.reduce((sum, table) => sum + table._count.cells, 0);
+        
+        results.push({
+          baseId: base.id,
+          baseName: base.name,
+          totalRows,
+          totalCells,
+          isLarge: totalRows > 1000 || totalCells > 5000
+        });
+      }
+      
+      return results;
     }),
 }); 

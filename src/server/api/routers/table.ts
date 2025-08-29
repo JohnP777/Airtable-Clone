@@ -25,6 +25,63 @@ function generateFakeBusinessData() {
   };
 }
 
+// Function to generate fake data for existing columns
+function generateFakeDataForColumns(columns: Array<{ id: string; name: string }>, rowCount: number) {
+  return Array.from({ length: rowCount }, (_, index) => ({
+    order: index,
+    cells: columns.map(column => {
+      switch (column.name.toLowerCase()) {
+        case 'employee name':
+        case 'name':
+        case 'full name':
+          return { value: faker.person.fullName() };
+        case 'department':
+        case 'team':
+          return { value: faker.helpers.arrayElement(['Engineering', 'Marketing', 'Sales', 'HR', 'Finance', 'Operations', 'Design', 'Product']) };
+        case 'email':
+        case 'email address':
+          return { value: faker.internet.email() };
+        case 'salary':
+        case 'pay':
+        case 'compensation':
+          return { value: `$${faker.number.int({ min: 45000, max: 180000 }).toLocaleString()}` };
+        case 'start date':
+        case 'hire date':
+        case 'date':
+          return { value: faker.date.past({ years: 3 }).toLocaleDateString() };
+        case 'phone':
+        case 'phone number':
+          return { value: faker.phone.number() };
+        case 'address':
+        case 'location':
+          return { value: faker.location.streetAddress() };
+        case 'company':
+        case 'organization':
+          return { value: faker.company.name() };
+        case 'job title':
+        case 'position':
+        case 'role':
+          return { value: faker.person.jobTitle() };
+        default:
+          // Generate random data based on column name patterns
+          if (column.name.toLowerCase().includes('name')) {
+            return { value: faker.person.fullName() };
+          } else if (column.name.toLowerCase().includes('email')) {
+            return { value: faker.internet.email() };
+          } else if (column.name.toLowerCase().includes('date')) {
+            return { value: faker.date.past({ years: 3 }).toLocaleDateString() };
+          } else if (column.name.toLowerCase().includes('phone')) {
+            return { value: faker.phone.number() };
+          } else if (column.name.toLowerCase().includes('address')) {
+            return { value: faker.location.streetAddress() };
+          } else {
+            return { value: faker.lorem.word() };
+          }
+      }
+    })
+  }));
+}
+
 export const tableRouter = createTRPCRouter({
   list: protectedProcedure
     .input(z.object({ baseId: z.string() }))
@@ -79,6 +136,7 @@ export const tableRouter = createTRPCRouter({
           },
           rows: {
             orderBy: { order: "asc" },
+            take: 1000, // Limit to 1000 rows to prevent memory issues
             include: {
               cells: {
                 include: {
@@ -502,5 +560,260 @@ export const tableRouter = createTRPCRouter({
       await Promise.all(updatePromises);
 
       return { success: true, updatedCells: input.cellData.length };
+    }),
+
+  addBulkRows: protectedProcedure
+    .input(z.object({ 
+      tableId: z.string(),
+      rowCount: z.number().min(1).max(1000) // Reduced from 10000 to 1000
+    }))
+    .mutation(async ({ ctx, input }) => {
+      // Verify user owns the table
+      const table = await ctx.db.table.findFirst({
+        where: { 
+          id: input.tableId,
+          base: { createdById: ctx.session.user.id }
+        },
+        include: { 
+          columns: { orderBy: { order: "asc" } }
+        }
+      });
+
+      if (!table) {
+        throw new Error("Table not found");
+      }
+
+      const currentRowCount = await ctx.db.tableRow.count({ where: { tableId: input.tableId } });
+      const startOrder = currentRowCount;
+
+      // Generate fake data for existing columns
+      const fakeData = generateFakeDataForColumns(table.columns, input.rowCount);
+
+      // Use a single transaction for better performance
+      const result = await ctx.db.$transaction(async (tx) => {
+        // Create all rows at once
+        const rowData = fakeData.map((row, index) => ({
+          tableId: input.tableId,
+          order: startOrder + index
+        }));
+
+        await tx.tableRow.createMany({
+          data: rowData
+        });
+
+        // Get all created row IDs in one query
+        const createdRows = await tx.tableRow.findMany({
+          where: { 
+            tableId: input.tableId,
+            order: { gte: startOrder }
+          },
+          select: { id: true, order: true },
+          orderBy: { order: "asc" }
+        });
+
+        // Prepare all cell data in memory
+        const allCellData = [];
+        for (let i = 0; i < fakeData.length; i++) {
+          const row = fakeData[i];
+          const rowId = createdRows[i]?.id;
+          if (!rowId || !row) continue;
+
+          for (let j = 0; j < table.columns.length; j++) {
+            const column = table.columns[j];
+            if (!column) continue;
+            
+            const cellValue = row.cells[j]?.value ?? '';
+            
+            allCellData.push({
+              tableId: input.tableId,
+              rowId: rowId,
+              columnId: column.id,
+              value: cellValue
+            });
+          }
+        }
+
+        // Create all cells in batches of 1000 for optimal performance
+        const cellBatchSize = 1000;
+        for (let i = 0; i < allCellData.length; i += cellBatchSize) {
+          const batch = allCellData.slice(i, i + cellBatchSize);
+          await tx.tableCell.createMany({
+            data: batch,
+            skipDuplicates: true // Skip if unique constraint violation
+          });
+        }
+
+        return { createdRows: createdRows.length, cellData: allCellData.length };
+      });
+
+      return { 
+        success: true, 
+        addedRows: result.createdRows,
+        totalRows: currentRowCount + result.createdRows,
+        cellsCreated: result.cellData
+      };
+    }),
+
+  // Ultra-fast bulk row addition using optimized batching
+  addBulkRowsFast: protectedProcedure
+    .input(z.object({ 
+      tableId: z.string(),
+      rowCount: z.number().min(1).max(1000)
+    }))
+    .mutation(async ({ ctx, input }) => {
+      // Verify user owns the table
+      const table = await ctx.db.table.findFirst({
+        where: { 
+          id: input.tableId,
+          base: { createdById: ctx.session.user.id }
+        },
+        include: { 
+          columns: { orderBy: { order: "asc" } }
+        }
+      });
+
+      if (!table) {
+        throw new Error("Table not found");
+      }
+
+      const currentRowCount = await ctx.db.tableRow.count({ where: { tableId: input.tableId } });
+      const startOrder = currentRowCount;
+
+      // Generate fake data for existing columns
+      const fakeData = generateFakeDataForColumns(table.columns, input.rowCount);
+
+      // Use optimized batching for maximum performance
+      const batchSize = 500; // Larger batches for better performance
+      let totalCreatedRows = 0;
+
+      for (let i = 0; i < input.rowCount; i += batchSize) {
+        const batch = fakeData.slice(i, i + batchSize);
+        
+        // Create rows for this batch
+        const rowData = batch.map((row, index) => ({
+          tableId: input.tableId,
+          order: startOrder + i + index
+        }));
+
+        await ctx.db.tableRow.createMany({
+          data: rowData
+        });
+
+        // Get the created row IDs for this batch
+        const rowIds = await ctx.db.tableRow.findMany({
+          where: { 
+            tableId: input.tableId,
+            order: { gte: startOrder + i, lt: startOrder + i + batch.length }
+          },
+          select: { id: true, order: true },
+          orderBy: { order: "asc" }
+        });
+
+        // Prepare all cell data for this batch
+        const batchCellData = [];
+        for (let j = 0; j < batch.length; j++) {
+          const row = batch[j];
+          const rowId = rowIds[j]?.id;
+          if (!rowId || !row) continue;
+
+          for (let k = 0; k < table.columns.length; k++) {
+            const column = table.columns[k];
+            if (!column) continue;
+            
+            const cellValue = row.cells[k]?.value ?? '';
+            
+            batchCellData.push({
+              tableId: input.tableId,
+              rowId: rowId,
+              columnId: column.id,
+              value: cellValue
+            });
+          }
+        }
+
+        // Create all cells for this batch at once
+        if (batchCellData.length > 0) {
+          await ctx.db.tableCell.createMany({
+            data: batchCellData,
+            skipDuplicates: true
+          });
+        }
+
+        totalCreatedRows += batch.length;
+      }
+
+      return { 
+        success: true, 
+        addedRows: totalCreatedRows,
+        totalRows: currentRowCount + totalCreatedRows
+      };
+    }),
+
+  getTableDataPaginated: protectedProcedure
+    .input(z.object({
+      tableId: z.string(),
+      page: z.number().min(0).default(0),
+      pageSize: z.number().min(1).max(100).default(50),
+      sortRules: z.array(z.object({
+        columnId: z.string(),
+        direction: z.enum(["asc", "desc"])
+      })).optional(),
+      filterRules: z.array(z.object({
+        columnId: z.string(),
+        operator: z.string(),
+        value: z.string()
+      })).optional()
+    }))
+    .query(async ({ ctx, input }) => {
+      const table = await ctx.db.table.findFirst({
+        where: {
+          id: input.tableId,
+          base: {
+            createdById: ctx.session.user.id
+          }
+        },
+        include: {
+          columns: {
+            orderBy: { order: "asc" }
+          }
+        }
+      });
+
+      if (!table) {
+        throw new Error("Table not found");
+      }
+
+      // Get total count for pagination
+      const totalRows = await ctx.db.tableRow.count({
+        where: { tableId: input.tableId }
+      });
+
+      // Get paginated rows with cells
+      const rows = await ctx.db.tableRow.findMany({
+        where: { tableId: input.tableId },
+        orderBy: { order: "asc" },
+        skip: input.page * input.pageSize,
+        take: input.pageSize,
+        include: {
+          cells: {
+            include: {
+              column: true
+            }
+          }
+        }
+      });
+
+      return {
+        table,
+        rows,
+        pagination: {
+          page: input.page,
+          pageSize: input.pageSize,
+          totalRows,
+          totalPages: Math.ceil(totalRows / input.pageSize),
+          hasNextPage: (input.page + 1) * input.pageSize < totalRows,
+          hasPreviousPage: input.page > 0
+        }
+      };
     })
 }); 

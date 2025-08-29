@@ -1,9 +1,9 @@
-import { Hero } from "An/app/_components/Hero";
-import { HomeContent } from "An/app/_components/HomeContent";
-import { AuthedHeader } from "An/app/_components/AuthedHeader";
-import { Sidebar } from "An/app/_components/Sidebar";
-import { SidebarProvider } from "An/app/_components/SidebarContext";
-import { auth } from "An/server/auth";
+import { Hero } from "./_components/Hero";
+import { HomeContent } from "./_components/HomeContent";
+import { AuthedHeader } from "./_components/AuthedHeader";
+import { Sidebar } from "./_components/Sidebar";
+import { SidebarProvider } from "./_components/SidebarContext";
+import { auth } from "../server/auth";
 
 export default async function Home() {
   const session = await auth();

@@ -2,7 +2,7 @@
 
 import React, { useRef, useEffect } from "react";
 import Image from "next/image";
-import { api } from "An/trpc/react";
+import { api } from "../../trpc/react";
 
 interface BaseContextMenuProps {
   baseId: string;
@@ -16,9 +16,14 @@ export function BaseContextMenu({ baseId, isOpen, onClose, position }: BaseConte
 
   const utils = api.useUtils();
   const deleteMutation = api.base.delete.useMutation({
-    onSuccess: () => {
+    onSuccess: (data) => {
+      console.log("Base deleted successfully:", data);
       void utils.base.getRecent.invalidate();
       onClose();
+    },
+    onError: (error) => {
+      console.error("Failed to delete base:", error);
+      alert("Failed to delete base. Please try again.");
     },
   });
 
@@ -57,10 +62,11 @@ export function BaseContextMenu({ baseId, isOpen, onClose, position }: BaseConte
     >
       <button
         onClick={handleDelete}
-        className="flex w-full items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-gray-100"
+        disabled={deleteMutation.isPending}
+        className="flex w-full items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
       >
         <Image src="/9.PNG" alt="Delete" width={16} height={16} />
-        <span>Delete</span>
+        <span>{deleteMutation.isPending ? "Deleting..." : "Delete"}</span>
       </button>
     </div>
   );
