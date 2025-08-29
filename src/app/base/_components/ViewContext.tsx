@@ -1,6 +1,7 @@
 "use client";
 
-import React, { createContext, useContext, useState, ReactNode } from "react";
+import React, { createContext, useContext, useState } from "react";
+import type { ReactNode } from "react";
 
 export interface View {
   id: string;
@@ -61,13 +62,13 @@ export function ViewProvider({ children, baseId }: ViewProviderProps) {
 
   const [currentViewId, setCurrentViewId] = useState<string>(`${baseId}-view-1`);
 
-  const currentView = views.find(view => view.id === currentViewId) || null;
+  const currentView = views.find(view => view.id === currentViewId) ?? null;
 
   const createView = (name: string) => {
     const newViewNumber = views.length + 1;
     const newView: View = {
       id: `${baseId}-view-${newViewNumber}`,
-      name: name || `Grid view ${newViewNumber}`,
+      name: name ?? `Grid view ${newViewNumber}`,
       type: "grid",
       sortRules: [],
       filterRules: [],
@@ -99,14 +100,14 @@ export function ViewProvider({ children, baseId }: ViewProviderProps) {
     // If we deleted the current view, switch to the first available view
     if (currentViewId === viewId) {
       const remainingViews = views.filter(view => view.id !== viewId);
-      if (remainingViews.length > 0) {
+      if (remainingViews.length > 0 && remainingViews[0]) {
         setCurrentViewId(remainingViews[0].id);
       }
     }
   };
 
   const getViewSettings = (viewId: string) => {
-    return views.find(view => view.id === viewId) || null;
+    return views.find(view => view.id === viewId) ?? null;
   };
 
   const value: ViewContextType = {

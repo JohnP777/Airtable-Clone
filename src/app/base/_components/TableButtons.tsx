@@ -16,7 +16,7 @@ export function TableButtons({ baseId, onTableSelect, selectedTableId }: TableBu
   const createTableMutation = api.table.createTable.useMutation({
     onSuccess: (newTable) => {
       // Invalidate and refetch the table list to show the new table
-      utils.table.list.invalidate({ baseId });
+      void utils.table.list.invalidate({ baseId });
       // Automatically switch to the newly created table
       onTableSelect(newTable.id);
     },
@@ -32,7 +32,7 @@ export function TableButtons({ baseId, onTableSelect, selectedTableId }: TableBu
 
   // Auto-select the first table when tables are loaded
   useEffect(() => {
-    if (tables && tables.length > 0 && !selectedTableId) {
+    if (tables && tables.length > 0 && !selectedTableId && tables[0]) {
       onTableSelect(tables[0].id);
     }
   }, [tables, selectedTableId, onTableSelect]);

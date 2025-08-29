@@ -28,7 +28,7 @@ export function HideFieldsButton({ tableId }: HideFieldsButtonProps) {
   // Filter fields based on search term
   const filteredFields = tableData?.columns?.filter(column => 
     column.name.toLowerCase().includes(searchTerm.toLowerCase())
-  ) || [];
+  ) ?? [];
 
   // Get all fields except the primary field (first column)
   const fieldsToShow = filteredFields.slice(1); // Skip the first column (primary field)

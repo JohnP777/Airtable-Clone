@@ -23,7 +23,7 @@ export function BaseContent({ baseId }: BaseContentProps) {
   }
 
   // Find the selected table
-  const selectedTable = tables.find(table => table.id === selectedTableId) || tables[0];
+  const selectedTable = tables.find(table => table.id === selectedTableId) ?? tables[0];
   
   if (!selectedTable) {
     return null;

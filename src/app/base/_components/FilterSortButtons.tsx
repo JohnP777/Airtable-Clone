@@ -56,7 +56,7 @@ export function FilterSortButtons() {
   const applySortMutation = api.table.applySort.useMutation({
     onSuccess: () => {
       // Invalidate and refetch table data with new sort rules
-      utils.table.getTableData.invalidate({ 
+      void utils.table.getTableData.invalidate({ 
         tableId: selectedTableId!,
         sortRules: sortRules.map(rule => ({
           columnId: rule.columnId,
@@ -84,7 +84,7 @@ export function FilterSortButtons() {
   };
 
   const handleAddFilterRule = () => {
-    if (tableData?.columns && tableData.columns.length > 0) {
+    if (tableData?.columns && tableData.columns.length > 0 && tableData.columns[0]) {
       const newRule: FilterRule = {
         id: `filter-${Date.now()}`,
         columnId: tableData.columns[0].id,
@@ -94,7 +94,7 @@ export function FilterSortButtons() {
       addFilterRule(newRule);
       
       // Invalidate to apply the filter
-      utils.table.getTableData.invalidate({ 
+      void utils.table.getTableData.invalidate({ 
         tableId: selectedTableId!,
         sortRules: sortRules.map(rule => ({
           columnId: rule.columnId,
@@ -114,7 +114,7 @@ export function FilterSortButtons() {
     removeFilterRule(ruleId);
     
     // Invalidate to apply the updated filter
-    utils.table.getTableData.invalidate({ 
+    void utils.table.getTableData.invalidate({ 
       tableId: selectedTableId!,
       sortRules: sortRules.map(rule => ({
         columnId: rule.columnId,
@@ -138,7 +138,7 @@ export function FilterSortButtons() {
     updateFilterRule(ruleId, field, value);
     
     // Invalidate to apply the updated filter
-    utils.table.getTableData.invalidate({ 
+    void utils.table.getTableData.invalidate({ 
       tableId: selectedTableId!,
       sortRules: sortRules.map(rule => ({
         columnId: rule.columnId,
@@ -191,7 +191,7 @@ export function FilterSortButtons() {
       });
     } else if (newSortRules.length === 0) {
       // Clear sorting by refetching without sort rules
-      utils.table.getTableData.invalidate({ 
+      void utils.table.getTableData.invalidate({ 
         tableId: selectedTableId!,
         filterRules: filterRules.map(rule => ({
           columnId: rule.columnId,
@@ -231,8 +231,10 @@ export function FilterSortButtons() {
     if (autoSortEnabled && sortRules.length > 1) {
       const newSortRules = [...sortRules];
       const index = newSortRules.findIndex(rule => rule.id === ruleId);
-      if (index > 0) {
-        [newSortRules[index - 1], newSortRules[index]] = [newSortRules[index], newSortRules[index - 1]];
+      if (index > 0 && index < newSortRules.length) {
+        const temp = newSortRules[index - 1]!;
+        newSortRules[index - 1] = newSortRules[index]!;
+        newSortRules[index] = temp;
         applySortMutation.mutate({
           tableId: selectedTableId!,
           sortRules: newSortRules.map(rule => ({
@@ -250,8 +252,10 @@ export function FilterSortButtons() {
     if (autoSortEnabled && sortRules.length > 1) {
       const newSortRules = [...sortRules];
       const index = newSortRules.findIndex(rule => rule.id === ruleId);
-      if (index < newSortRules.length - 1) {
-        [newSortRules[index], newSortRules[index + 1]] = [newSortRules[index + 1], newSortRules[index]];
+      if (index >= 0 && index < newSortRules.length - 1) {
+        const temp = newSortRules[index]!;
+        newSortRules[index] = newSortRules[index + 1]!;
+        newSortRules[index + 1] = temp;
         applySortMutation.mutate({
           tableId: selectedTableId!,
           sortRules: newSortRules.map(rule => ({
@@ -284,7 +288,7 @@ export function FilterSortButtons() {
   };
 
   const getColumnName = (columnId: string) => {
-    return tableData?.columns?.find(col => col.id === columnId)?.name || "";
+    return tableData?.columns?.find(col => col.id === columnId)?.name ?? "";
   };
 
   // Get available columns (excluding already selected ones)
@@ -307,7 +311,7 @@ export function FilterSortButtons() {
       });
     } else if (!enabled) {
       // Clear sorting when auto-sort is disabled
-      utils.table.getTableData.invalidate({ 
+      void utils.table.getTableData.invalidate({ 
         tableId: selectedTableId!,
         filterRules: filterRules.map(rule => ({
           columnId: rule.columnId,

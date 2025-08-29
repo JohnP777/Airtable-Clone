@@ -1,6 +1,7 @@
 "use client";
 
-import React, { createContext, useContext, useState, ReactNode, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect } from "react";
+import type { ReactNode } from "react";
 import { useView } from "./ViewContext";
 
 interface SortRule {
@@ -70,7 +71,9 @@ export function SortProvider({ children }: SortProviderProps) {
       if (index <= 0) return prev; // Can't move up if it's the first or not found
       
       const newRules = [...prev];
-      [newRules[index - 1], newRules[index]] = [newRules[index], newRules[index - 1]];
+      const temp = newRules[index - 1]!;
+      newRules[index - 1] = newRules[index]!;
+      newRules[index] = temp;
       return newRules;
     });
   };
@@ -81,7 +84,9 @@ export function SortProvider({ children }: SortProviderProps) {
       if (index === -1 || index === prev.length - 1) return prev; // Can't move down if it's the last or not found
       
       const newRules = [...prev];
-      [newRules[index], newRules[index + 1]] = [newRules[index + 1], newRules[index]];
+      const temp = newRules[index]!;
+      newRules[index] = newRules[index + 1]!;
+      newRules[index + 1] = temp;
       return newRules;
     });
   };

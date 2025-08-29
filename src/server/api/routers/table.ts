@@ -101,7 +101,7 @@ export const tableRouter = createTRPCRouter({
         filteredRows = filteredRows.filter(row => {
           return input.filterRules!.every(filterRule => {
             const cell = row.cells.find(cell => cell.columnId === filterRule.columnId);
-            const cellValue = cell?.value || "";
+            const cellValue = cell?.value ?? "";
             
             switch (filterRule.operator) {
               case "contains":
@@ -131,8 +131,8 @@ export const tableRouter = createTRPCRouter({
             const aCell = a.cells.find(cell => cell.columnId === sortRule.columnId);
             const bCell = b.cells.find(cell => cell.columnId === sortRule.columnId);
             
-            const aValue = aCell?.value || "";
-            const bValue = bCell?.value || "";
+            const aValue = aCell?.value ?? "";
+            const bValue = bCell?.value ?? "";
             
             // Handle numeric values (remove $ and commas for salary)
             const aNumeric = parseFloat(aValue.replace(/[$,]/g, ""));

@@ -1,6 +1,7 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import React, { createContext, useContext, useState, useEffect } from "react";
+import type { ReactNode } from "react";
 import { api } from "An/trpc/react";
 
 interface TableContextType {
@@ -21,7 +22,7 @@ export function TableProvider({ children, baseId }: TableProviderProps) {
 
   // Auto-select the first table when tables are loaded
   useEffect(() => {
-    if (tables && tables.length > 0 && !selectedTableId) {
+    if (tables && tables.length > 0 && !selectedTableId && tables[0]) {
       setSelectedTableId(tables[0].id);
     }
   }, [tables, selectedTableId]);
