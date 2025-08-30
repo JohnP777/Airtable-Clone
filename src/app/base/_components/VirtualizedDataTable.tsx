@@ -95,16 +95,18 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
   useLayoutEffect(() => {
     const el = listRef.current;
     if (!el) return;
-    const update = () => {
-      const rect = el.getBoundingClientRect();
-      setScrollMargin(rect.top + window.scrollY);
+    const getOffsetTop = () => {
+      // Robustly accumulate offsetTop up the offsetParent chain
+      let y = 0, n: HTMLElement | null = el;
+      while (n) { y += n.offsetTop; n = n.offsetParent as HTMLElement | null; }
+      return y;
     };
-    update();
+    const update = () => setScrollMargin(getOffsetTop());
+    update(); // on mount
 
-    const ro = new ResizeObserver(update);
+    const ro = new ResizeObserver(update); // layout changes
     ro.observe(el);
     window.addEventListener('resize', update);
-
     return () => {
       ro.disconnect();
       window.removeEventListener('resize', update);
@@ -115,7 +117,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
   const virtualizer = useWindowVirtualizer({
     count: totalRows,
     estimateSize: () => ROW_HEIGHT,
-    overscan: 50, // Increased overscan for smoother loading
+    overscan: 80, // Increased overscan for ultra-tall screens and smoother loading
     scrollMargin,
   });
 
@@ -158,11 +160,12 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
     }
   );
 
-  // Load next page for smooth scrolling
-  const { data: nextPageData } = api.table.getTableDataPaginated.useQuery(
+  // Load the page that contains the tail of the visible window
+  const needEndPage = endPage > startPage;
+  const { data: endPageData } = api.table.getTableDataPaginated.useQuery(
     {
       tableId,
-      page: endPage + 1,
+      page: endPage,
       pageSize: PAGE_SIZE,
       sortRules: sortRules.map(rule => ({
         columnId: rule.columnId,
@@ -175,7 +178,33 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
       }))
     },
     { 
-      enabled: !!tableId && totalRows > 0 && endPage + 1 < Math.ceil(totalRows / PAGE_SIZE),
+      enabled: !!tableId && totalRows > 0 && needEndPage,
+      staleTime: 2000, // Reduced stale time for more responsive updates
+      placeholderData: (prev) => prev, // Keep previous data while loading to prevent flicker
+      refetchOnWindowFocus: false,
+    }
+  );
+
+  // Load the middle page when the range spans 2+ pages
+  const needMidPage = endPage - startPage >= 2;
+  const midPage = startPage + 1;
+  const { data: midPageData } = api.table.getTableDataPaginated.useQuery(
+    {
+      tableId,
+      page: midPage,
+      pageSize: PAGE_SIZE,
+      sortRules: sortRules.map(rule => ({
+        columnId: rule.columnId,
+        direction: rule.direction
+      })),
+      filterRules: filterRules.map(rule => ({
+        columnId: rule.columnId,
+        operator: rule.operator,
+        value: rule.value
+      }))
+    },
+    { 
+      enabled: !!tableId && totalRows > 0 && needMidPage,
       staleTime: 2000, // Reduced stale time for more responsive updates
       placeholderData: (prev) => prev, // Keep previous data while loading to prevent flicker
       refetchOnWindowFocus: false,
@@ -206,7 +235,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
     }
   );
 
-  // Combine all loaded data (current + next + previous pages)
+  // Combine all loaded data (current + middle + end + previous pages)
   const allRows = useMemo(() => {
     const rows: Array<{
       id: string;
@@ -224,13 +253,25 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
       rows.push(...tableData.rows);
     }
     
-    // Add next page rows if available
-    if (nextPageData?.rows) {
-      rows.push(...nextPageData.rows);
+    // Add middle page rows if available
+    if (midPageData?.rows) {
+      rows.push(...midPageData.rows);
+    }
+    
+    // Add end page rows if available
+    if (endPageData?.rows) {
+      rows.push(...endPageData.rows);
     }
     
     return rows;
-  }, [tableData?.rows, nextPageData?.rows, prevPageData?.rows]);
+  }, [tableData?.rows, midPageData?.rows, endPageData?.rows, prevPageData?.rows]);
+
+  // O(1) lookup map instead of O(n) .find() calls
+  const rowByOrder = useMemo(() => {
+    const m = new Map<number, typeof allRows[number]>();
+    for (const r of allRows) m.set(r.order, r);
+    return m;
+  }, [allRows]);
 
   const updateCellMutation = api.table.updateCell.useMutation({
     onMutate: async ({ tableId, rowId, columnId, value }) => {
@@ -807,14 +848,8 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
            {virtualizer.getVirtualItems().map((virtualRow) => {
              const rowIndex = virtualRow.index;
              
-             // Calculate which page this row belongs to
-             const targetPage = Math.floor(rowIndex / PAGE_SIZE);
-             
-             // Find the row data in our loaded pages
-             const row = allRows.find(r => {
-               const rowPage = Math.floor((r.order) / PAGE_SIZE);
-               return rowPage === targetPage && (r.order) === rowIndex;
-             });
+                           // Use O(1) lookup instead of O(n) search
+              const row = rowByOrder.get(rowIndex);
              
              if (!row) {
                return (
@@ -823,7 +858,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                    className="absolute top-0 left-0 w-full"
                    style={{
                      height: `${virtualRow.size}px`,
-                     transform: `translateY(${virtualRow.start - scrollMargin}px)`,
+                     transform: `translateY(${virtualRow.start}px)`,
                    }}
                  >
                    <div className="h-9 border-b border-gray-200 bg-gray-50 flex items-center justify-center text-gray-500">
@@ -839,7 +874,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                  className="absolute top-0 left-0 w-full"
                  style={{
                    height: `${virtualRow.size}px`,
-                   transform: `translateY(${virtualRow.start - scrollMargin}px)`,
+                   transform: `translateY(${virtualRow.start}px)`,
                  }}
                >
                                     <div className="h-9 border-b border-gray-200 hover:bg-gray-100 transition-colors duration-150 flex">
@@ -866,8 +901,13 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                              key={column.id}
                              data-row-id={row.id}
                              data-column-id={column.id}
-                             className="border-r border-gray-200 flex items-center"
-                                                           style={{ width: '250px', minWidth: '250px', maxWidth: '250px' }}
+                             className="flex items-center"
+                                                           style={{ 
+                                                             width: '250px', 
+                                                             minWidth: '250px', 
+                                                             maxWidth: '250px',
+                                                             borderRight: '1px solid #e5e7eb' // Explicit right border
+                                                           }}
                            >
                                                         <div 
                                className={`px-2 py-1 cursor-pointer w-full h-full flex items-center pointer-events-none ${
@@ -964,15 +1004,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
          </button>
        </div>
        
-               {/* Status bar */}
-        <div 
-          className="border border-gray-200 border-t-0 bg-gray-50 px-4 py-2 text-sm text-gray-600"
-          style={{ width: `${40 + (tableData.table.columns.filter(col => !isFieldHidden(col.id)).length * 250)}px` }}
-        >
-          Total: {totalRows.toLocaleString()}. 
-          Visible: {startIndex + 1}-{Math.min(endIndex + 1, totalRows)}. 
-          Loaded pages: {Math.ceil((endPage - startPage + 1) * PAGE_SIZE / PAGE_SIZE)}.
-        </div>
+                               {/* Status bar removed - no longer showing to users */}
        
        
       </div>
