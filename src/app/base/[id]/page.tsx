@@ -24,7 +24,7 @@ export default async function BasePage({ params, }: { params: Promise<{ id: stri
           <FilterProvider>
             <SearchProvider>
               <HiddenFieldsProvider>
-                <div className="h-screen bg-[#f9fafb] relative">
+                <div className="min-h-screen bg-[#f9fafb] relative overflow-hidden">
               {/* Fixed Base Header */}
               <div className="fixed top-0 left-0 right-0 z-50 bg-[#f9fafb]">
                 <BaseHeader />
@@ -56,7 +56,7 @@ export default async function BasePage({ params, }: { params: Promise<{ id: stri
                 </div>
                 
                 {/* Content area with fixed right sidebar */}
-                <div className="flex flex-1">
+                <div className="flex flex-1 overflow-hidden">
                   <BaseContent baseId={id} />
                 </div>
               </div>

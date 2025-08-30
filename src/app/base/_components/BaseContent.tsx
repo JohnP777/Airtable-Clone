@@ -35,7 +35,7 @@ export function BaseContent({ baseId }: BaseContentProps) {
       <div className="w-56 shrink-0 border-r border-gray-200 bg-white fixed left-14 top-28 bottom-0 z-10">
         <ViewSidebar tableId={selectedTable.id} />
       </div>
-      <div className="flex-1 overflow-auto ml-56">
+      <div className="flex-1 ml-56">
         <div className="p-4">
           <VirtualizedDataTable tableId={selectedTable.id} />
         </div>

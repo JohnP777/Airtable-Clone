@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useRef, useCallback, useEffect } from "react";
+import React, { useState, useMemo, useRef, useCallback, useEffect, useLayoutEffect } from "react";
 import {
   useReactTable,
   getCoreRowModel,
@@ -9,7 +9,7 @@ import {
   type Column,
   type Row,
 } from "@tanstack/react-table";
-import { useVirtualizer } from "@tanstack/react-virtual";
+import { useWindowVirtualizer } from "@tanstack/react-virtual";
 
 import { api } from "../../../trpc/react";
 import { useTableContext } from "./TableContext";
@@ -37,6 +37,8 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
   const { isFieldHidden } = useHiddenFields();
   const inputRef = useRef<HTMLInputElement>(null);
   const currentValueRef = useRef<string>("");
+  const listRef = useRef<HTMLDivElement>(null);
+  const [scrollMargin, setScrollMargin] = useState(0);
   
   const [editingCell, setEditingCell] = useState<{
     rowId: string;
@@ -74,14 +76,47 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
     }
   );
 
-  const totalRows = totalCountData?.pagination?.totalRows ?? 0;
+  // Keep total count stable to prevent virtualizer collapse during fast scrolling
+  const [stableTotal, setStableTotal] = useState<number | null>(null);
+  const prevTotalRef = useRef(0);
+  
+  useEffect(() => {
+    const t = totalCountData?.pagination?.totalRows;
+    if (typeof t === 'number') { 
+      prevTotalRef.current = t; 
+      setStableTotal(t); 
+    }
+  }, [totalCountData?.pagination?.totalRows]);
 
-  // Use main page scroll for the entire table content area
-  const virtualizer = useVirtualizer({
+  const countForVirtualizer = stableTotal ?? prevTotalRef.current ?? 0;
+  const totalRows = countForVirtualizer;
+
+  // Measure the table container's offset from the top of the page
+  useLayoutEffect(() => {
+    const el = listRef.current;
+    if (!el) return;
+    const update = () => {
+      const rect = el.getBoundingClientRect();
+      setScrollMargin(rect.top + window.scrollY);
+    };
+    update();
+
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    window.addEventListener('resize', update);
+
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', update);
+    };
+  }, []);
+
+  // Use window virtualizer for proper page-level scrolling
+  const virtualizer = useWindowVirtualizer({
     count: totalRows,
-    getScrollElement: () => document.documentElement, // Use main page scroll
     estimateSize: () => ROW_HEIGHT,
-    overscan: 30, // Render more rows for smooth scrolling
+    overscan: 50, // Increased overscan for smoother loading
+    scrollMargin,
   });
 
   // Calculate which pages we need based on virtualizer range
@@ -95,24 +130,9 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
   // Debug logging
   console.log('Virtualizer range:', { startIndex, endIndex, startPage, endPage, totalRows, virtualizerRange: virtualizerRange.length });
 
-  // Force virtualizer to recalculate when scroll position changes
-  useEffect(() => {
-    if (totalRows > 0) {
-      virtualizer.measure();
-    }
-  }, [virtualizer, totalRows]);
+  // Remove manual measure call - it can cause jitter during fast scrolling
 
-  // Add scroll event listener to force virtualizer updates
-  useEffect(() => {
-    const handleScroll = () => {
-      if (totalRows > 0) {
-        virtualizer.measure();
-      }
-    };
-
-    document.addEventListener('scroll', handleScroll, { passive: true });
-    return () => document.removeEventListener('scroll', handleScroll);
-  }, [virtualizer, totalRows]);
+  // Remove manual scroll listener - useWindowVirtualizer handles it automatically
 
   // Load current page data (the page containing the visible rows)
   const { data: tableData, isLoading } = api.table.getTableDataPaginated.useQuery(
@@ -132,7 +152,9 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
     },
     { 
       enabled: !!tableId && totalRows > 0 && startPage >= 0,
-      staleTime: 5000, // Cache pages for 5 seconds for more responsive updates
+      staleTime: 2000, // Reduced stale time for more responsive updates
+      placeholderData: (prev) => prev, // Keep previous data while loading to prevent flicker
+      refetchOnWindowFocus: false,
     }
   );
 
@@ -154,7 +176,9 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
     },
     { 
       enabled: !!tableId && totalRows > 0 && endPage + 1 < Math.ceil(totalRows / PAGE_SIZE),
-      staleTime: 5000, // Cache pages for 5 seconds for more responsive updates
+      staleTime: 2000, // Reduced stale time for more responsive updates
+      placeholderData: (prev) => prev, // Keep previous data while loading to prevent flicker
+      refetchOnWindowFocus: false,
     }
   );
 
@@ -176,7 +200,9 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
     },
     { 
       enabled: !!tableId && totalRows > 0 && startPage > 0,
-      staleTime: 5000, // Cache pages for 5 seconds for more responsive updates
+      staleTime: 2000, // Reduced stale time for more responsive updates
+      placeholderData: (prev) => prev, // Keep previous data while loading to prevent flicker
+      refetchOnWindowFocus: false,
     }
   );
 
@@ -631,9 +657,8 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
     columnResizeMode: "onChange",
   });
 
-  if (isLoading) {
-    return <div className="flex items-center justify-center h-64">Loading...</div>;
-  }
+  // Don't return null on loading - keep the table mounted to prevent layout collapse
+  // The loading state is handled by showing "Loading row..." placeholders in the rows
 
   // If no data and no rows, show empty table structure
   if (!tableData && totalRows === 0) {
@@ -685,7 +710,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
   }
 
   return (
-    <div className="w-full">
+    <div className="w-full overflow-hidden">
                    {/* Fixed Table Header */}
       <div className="fixed top-28 left-70 z-10 bg-white border border-gray-200 border-b-0">
         <div className="flex">
@@ -764,16 +789,19 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
         </div>
       </div>
       
-             {/* Table Content with margin-top to account for fixed header */}
-       <div style={{ marginTop: '20px', marginLeft: '40px' }}>
+                   {/* Table Content with margin-top to account for fixed header */}
+      <div style={{ marginTop: '20px', marginLeft: '40px', overflow: 'hidden' }}>
       
                                  {/* Virtualized table body using main page scroll */}
         <div 
+          ref={listRef}
           className="border-l border-b border-gray-200"
           style={{ 
             height: `${virtualizer.getTotalSize()}px`,
             width: `${40 + (tableData.table.columns.filter(col => !isFieldHidden(col.id)).length * 250)}px`,
-            position: 'relative'
+            position: 'relative',
+            overflow: 'hidden', // Prevent any internal scrolling
+            maxHeight: 'none' // Ensure no max-height constraints
           }}
         >
            {virtualizer.getVirtualItems().map((virtualRow) => {
@@ -795,7 +823,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                    className="absolute top-0 left-0 w-full"
                    style={{
                      height: `${virtualRow.size}px`,
-                     transform: `translateY(${virtualRow.start}px)`,
+                     transform: `translateY(${virtualRow.start - scrollMargin}px)`,
                    }}
                  >
                    <div className="h-9 border-b border-gray-200 bg-gray-50 flex items-center justify-center text-gray-500">
@@ -811,7 +839,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                  className="absolute top-0 left-0 w-full"
                  style={{
                    height: `${virtualRow.size}px`,
-                   transform: `translateY(${virtualRow.start}px)`,
+                   transform: `translateY(${virtualRow.start - scrollMargin}px)`,
                  }}
                >
                                     <div className="h-9 border-b border-gray-200 hover:bg-gray-100 transition-colors duration-150 flex">
