@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { api } from "../../../trpc/react";
-import { DataTable } from "./DataTable";
+import { VirtualizedDataTable } from "./VirtualizedDataTable";
 import { ViewSidebar } from "./ViewSidebar";
 import { useTableContext } from "./TableContext";
 
@@ -13,23 +13,6 @@ interface BaseContentProps {
 export function BaseContent({ baseId }: BaseContentProps) {
   const { data: tables, isLoading } = api.table.list.useQuery({ baseId });
   const { selectedTableId } = useTableContext();
-  const [useVirtualizedTable, setUseVirtualizedTable] = useState(false);
-
-  // For now, use regular table. Virtualization can be added later
-  // const { data: tableData } = api.table.getTableData.useQuery(
-  //   { tableId: selectedTableId! },
-  //   { 
-  //     enabled: !!selectedTableId,
-  //     staleTime: 30000, // Cache for 30 seconds
-  //   }
-  // );
-
-  // useEffect(() => {
-  //   if (tableData?.rows) {
-  //     // Use virtualized table if there are more than 1000 rows
-  //     setUseVirtualizedTable(tableData.rows.length > 1000);
-  //   }
-  // }, [tableData?.rows]);
 
   if (isLoading) {
     return null;
@@ -49,12 +32,12 @@ export function BaseContent({ baseId }: BaseContentProps) {
   return (
     <div className="w-full h-full flex">
       {/* Views sidebar - positioned to touch the third header and primary sidebar */}
-      <div className="w-56 shrink-0 border-r border-gray-200 bg-white">
+      <div className="w-56 shrink-0 border-r border-gray-200 bg-white fixed left-14 top-28 bottom-0 z-10">
         <ViewSidebar tableId={selectedTable.id} />
       </div>
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 overflow-auto ml-56">
         <div className="p-4">
-          <DataTable tableId={selectedTable.id} />
+          <VirtualizedDataTable tableId={selectedTable.id} />
         </div>
       </div>
     </div>
