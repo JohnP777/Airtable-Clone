@@ -3,6 +3,8 @@
 import React from "react";
 import Image from "next/image";
 
+
+
 export function BaseHeader() {
   return (
     <header className="relative z-50 w-full bg-white border-b border-gray-200 shadow-sm">

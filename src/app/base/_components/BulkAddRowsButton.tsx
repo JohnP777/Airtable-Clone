@@ -16,8 +16,10 @@ export function BulkAddRowsButton() {
   const addBulkRowsMutation = api.table.addBulkRowsFast.useMutation({
     onMutate: async ({ tableId, rowCount }) => {
       // Cancel any outgoing refetches
-      await utils.table.getTableData.cancel({ 
+      await utils.table.getTableDataPaginated.cancel({ 
         tableId,
+        page: 0,
+        pageSize: 100,
         sortRules: sortRules.map(rule => ({
           columnId: rule.columnId,
           direction: rule.direction
@@ -30,8 +32,10 @@ export function BulkAddRowsButton() {
       });
       
       // Snapshot the previous value
-      const previousData = utils.table.getTableData.getData({ 
+      const previousData = utils.table.getTableDataPaginated.getData({ 
         tableId,
+        page: 0,
+        pageSize: 100,
         sortRules: sortRules.map(rule => ({
           columnId: rule.columnId,
           direction: rule.direction
@@ -48,8 +52,10 @@ export function BulkAddRowsButton() {
     onError: (err, { tableId }, context) => {
       // If the mutation fails, use the context returned from onMutate to roll back
       if (context?.previousData) {
-        utils.table.getTableData.setData({ 
+        utils.table.getTableDataPaginated.setData({ 
           tableId,
+          page: 0,
+          pageSize: 100,
           sortRules: sortRules.map(rule => ({
             columnId: rule.columnId,
             direction: rule.direction
@@ -66,9 +72,11 @@ export function BulkAddRowsButton() {
       // Always refetch after error or success
       console.log("Bulk rows added, invalidating cache...");
       
-      // Force immediate cache invalidation
-      void utils.table.getTableData.invalidate({ 
+      // Force immediate cache invalidation for paginated data
+      void utils.table.getTableDataPaginated.invalidate({ 
         tableId,
+        page: 0,
+        pageSize: 100,
         sortRules: sortRules.map(rule => ({
           columnId: rule.columnId,
           direction: rule.direction
@@ -81,7 +89,7 @@ export function BulkAddRowsButton() {
       });
       
       // Also invalidate all table data queries for this table
-      void utils.table.getTableData.invalidate();
+      void utils.table.getTableDataPaginated.invalidate();
     },
   });
 
@@ -89,11 +97,12 @@ export function BulkAddRowsButton() {
     if (!selectedTableId) return;
     
     setIsAdding(true);
+    
     try {
-                   await addBulkRowsMutation.mutateAsync({ 
-               tableId: selectedTableId, 
-               rowCount: 10000 
-             });
+      await addBulkRowsMutation.mutateAsync({ 
+        tableId: selectedTableId, 
+        rowCount: 10000 
+      });
     } catch (error) {
       console.error("Failed to add bulk rows:", error);
     } finally {
@@ -108,9 +117,9 @@ export function BulkAddRowsButton() {
       onClick={handleAddBulkRows}
       disabled={isAdding || addBulkRowsMutation.isPending}
       className="px-3 py-1 text-xs bg-green-500 text-white rounded border border-green-600 shadow-sm hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                   title="Add 10,000 rows with fake data"
+      title="Add 10,000 rows with fake data (optimized for speed)"
     >
-                   {isAdding || addBulkRowsMutation.isPending ? "Adding..." : "Add 10k rows"}
+      {isAdding || addBulkRowsMutation.isPending ? "Adding..." : "Add 10k rows"}
     </button>
   );
 }

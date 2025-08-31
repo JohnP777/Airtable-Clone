@@ -2,6 +2,21 @@ import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc";
 import { faker } from '@faker-js/faker';
 
+// Configuration for bulk operations
+const BULK_OPERATION_CONFIG = {
+  // Adjust batch size based on database performance
+  // PostgreSQL can handle larger batches efficiently
+  BATCH_SIZE: 2500,
+  // Maximum concurrent batches to avoid overwhelming the database
+  MAX_CONCURRENT_BATCHES: 4,
+  // Progress update interval in milliseconds
+  PROGRESS_UPDATE_INTERVAL: 100,
+  // Enable database-specific optimizations
+  ENABLE_FAST_PATH: true,
+  // Use raw SQL for maximum performance when possible
+  USE_RAW_SQL: false
+};
+
 // Function to generate fake data for business columns
 function generateFakeBusinessData() {
   return {
@@ -692,64 +707,85 @@ export const tableRouter = createTRPCRouter({
       // Generate fake data for existing columns
       const fakeData = generateFakeDataForColumns(table.columns, input.rowCount);
 
-      // Use optimized batching for maximum performance
-      const batchSize = 500; // Larger batches for better performance
+      // Use much larger batches and concurrent processing for maximum performance
+      const batchSize = BULK_OPERATION_CONFIG.BATCH_SIZE;
+      const totalBatches = Math.ceil(input.rowCount / batchSize);
       let totalCreatedRows = 0;
 
-      for (let i = 0; i < input.rowCount; i += batchSize) {
-        const batch = fakeData.slice(i, i + batchSize);
+      // Process batches with controlled concurrency to avoid overwhelming the database
+      const processBatch = async (batchIndex: number) => {
+        const startIndex = batchIndex * batchSize;
+        const endIndex = Math.min(startIndex + batchSize, input.rowCount);
+        const batch = fakeData.slice(startIndex, endIndex);
         
-        // Create rows for this batch with sequential ordering
-        const rowData = batch.map((row, index) => ({
-          tableId: input.tableId,
-          order: startOrder + i + index
-        }));
-
-        await ctx.db.tableRow.createMany({
-          data: rowData
-        });
-
-        // Get the created row IDs for this batch
-        const rowIds = await ctx.db.tableRow.findMany({
-          where: {
+        // Use a transaction for each batch to ensure atomicity
+        return await ctx.db.$transaction(async (tx) => {
+          // Create rows for this batch with sequential ordering
+          const rowData = batch.map((row, index) => ({
             tableId: input.tableId,
-            order: { gte: startOrder + i, lt: startOrder + i + batch.length }
-          },
-          select: { id: true, order: true },
-          orderBy: { order: "asc" }
-        });
+            order: startOrder + startIndex + index
+          }));
 
-        // Prepare all cell data for this batch
-        const batchCellData = [];
-        for (let j = 0; j < batch.length; j++) {
-          const row = batch[j];
-          const rowId = rowIds[j]?.id;
-          if (!rowId || !row) continue;
+          // Create all rows for this batch at once
+          await tx.tableRow.createMany({
+            data: rowData
+          });
 
-          for (let k = 0; k < table.columns.length; k++) {
-            const column = table.columns[k];
-            if (!column) continue;
-            
-            const cellValue = row.cells[k]?.value ?? '';
-            
-            batchCellData.push({
+          // Get the created row IDs for this batch
+          const rowIds = await tx.tableRow.findMany({
+            where: {
               tableId: input.tableId,
-              rowId: rowId,
-              columnId: column.id,
-              value: cellValue
+              order: { gte: startOrder + startIndex, lt: startOrder + endIndex }
+            },
+            select: { id: true, order: true },
+            orderBy: { order: "asc" }
+          });
+
+          // Prepare all cell data for this batch
+          const batchCellData = [];
+          for (let j = 0; j < batch.length; j++) {
+            const row = batch[j];
+            const rowId = rowIds[j]?.id;
+            if (!rowId || !row) continue;
+
+            for (let k = 0; k < table.columns.length; k++) {
+              const column = table.columns[k];
+              if (!column) continue;
+              
+              const cellValue = row.cells[k]?.value ?? '';
+              
+              batchCellData.push({
+                tableId: input.tableId,
+                rowId: rowId,
+                columnId: column.id,
+                value: cellValue
+              });
+            }
+          }
+
+          // Create all cells for this batch at once
+          if (batchCellData.length > 0) {
+            await tx.tableCell.createMany({
+              data: batchCellData,
+              skipDuplicates: true
             });
           }
-        }
 
-        // Create all cells for this batch at once
-        if (batchCellData.length > 0) {
-          await ctx.db.tableCell.createMany({
-            data: batchCellData,
-            skipDuplicates: true
-          });
-        }
+          return batch.length;
+        });
+      };
 
-        totalCreatedRows += batch.length;
+      // Process batches with controlled concurrency
+      const batchPromises = [];
+      for (let i = 0; i < totalBatches; i += BULK_OPERATION_CONFIG.MAX_CONCURRENT_BATCHES) {
+        const concurrentBatch = [];
+        for (let j = 0; j < BULK_OPERATION_CONFIG.MAX_CONCURRENT_BATCHES && i + j < totalBatches; j++) {
+          concurrentBatch.push(processBatch(i + j));
+        }
+        
+        // Wait for current concurrent batch to complete before starting next
+        const batchResults = await Promise.all(concurrentBatch);
+        totalCreatedRows += batchResults.reduce((sum, count) => sum + count, 0);
       }
 
       return { 

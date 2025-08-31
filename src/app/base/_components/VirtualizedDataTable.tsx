@@ -72,7 +72,8 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
     },
     { 
       enabled: !!tableId,
-      staleTime: 30000, // Cache total count for 30 seconds
+      staleTime: 5000, // Reduced cache time for more responsive updates during bulk operations
+      refetchInterval: 2000, // Auto-refetch every 2 seconds during bulk operations
     }
   );
 
@@ -154,9 +155,10 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
     },
     { 
       enabled: !!tableId && totalRows > 0 && startPage >= 0,
-      staleTime: 2000, // Reduced stale time for more responsive updates
+      staleTime: 1000, // Further reduced stale time for ultra-responsive updates during bulk operations
       placeholderData: (prev) => prev, // Keep previous data while loading to prevent flicker
       refetchOnWindowFocus: false,
+      refetchInterval: 1000, // Auto-refetch every second during bulk operations
     }
   );
 
@@ -179,9 +181,10 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
     },
     { 
       enabled: !!tableId && totalRows > 0 && needEndPage,
-      staleTime: 2000, // Reduced stale time for more responsive updates
+      staleTime: 1000, // Further reduced stale time for ultra-responsive updates during bulk operations
       placeholderData: (prev) => prev, // Keep previous data while loading to prevent flicker
       refetchOnWindowFocus: false,
+      refetchInterval: 1000, // Auto-refetch every second during bulk operations
     }
   );
 
@@ -205,9 +208,10 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
     },
     { 
       enabled: !!tableId && totalRows > 0 && needMidPage,
-      staleTime: 2000, // Reduced stale time for more responsive updates
+      staleTime: 1000, // Further reduced stale time for ultra-responsive updates during bulk operations
       placeholderData: (prev) => prev, // Keep previous data while loading to prevent flicker
       refetchOnWindowFocus: false,
+      refetchInterval: 1000, // Auto-refetch every second during bulk operations
     }
   );
 
@@ -229,9 +233,10 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
     },
     { 
       enabled: !!tableId && totalRows > 0 && startPage > 0,
-      staleTime: 2000, // Reduced stale time for more responsive updates
+      staleTime: 1000, // Further reduced stale time for ultra-responsive updates during bulk operations
       placeholderData: (prev) => prev, // Keep previous data while loading to prevent flicker
       refetchOnWindowFocus: false,
+      refetchInterval: 1000, // Auto-refetch every second during bulk operations
     }
   );
 
