@@ -10,7 +10,7 @@ function generateFakeBusinessData() {
       { name: "Department", order: 1 },
       { name: "Email", order: 2 }
     ],
-    rows: Array.from({ length: 5 }, (_, index) => ({
+    rows: Array.from({ length: 100 }, (_, index) => ({
       order: index,
       cells: [
         { value: faker.person.fullName() },

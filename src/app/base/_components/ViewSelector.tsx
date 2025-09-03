@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { useView } from "./ViewContext";
 
 export function ViewSelector() {
-  const { views, currentViewId, currentView, switchView, createView, deleteView } = useView();
+  const { views, currentViewId, switchView, createView } = useView();
   const [showAddView, setShowAddView] = useState(false);
   const [newViewName, setNewViewName] = useState("");
 
@@ -16,10 +16,7 @@ export function ViewSelector() {
     }
   };
 
-  const handleDeleteView = (viewId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    deleteView(viewId);
-  };
+  // Note: deleteView functionality not yet implemented in the new ViewContext
 
   return (
     <div className="flex flex-col items-center space-y-2">
@@ -36,14 +33,6 @@ export function ViewSelector() {
             }`}
           >
             <span className="truncate text-xs">{view.name}</span>
-            {views.length > 1 && (
-              <button
-                onClick={(e) => handleDeleteView(view.id, e)}
-                className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center text-xs hover:bg-red-600"
-              >
-                ×
-              </button>
-            )}
           </button>
         ))}
       </div>

@@ -12,11 +12,13 @@ import {
 import { useWindowVirtualizer } from "@tanstack/react-virtual";
 
 import { api } from "../../../trpc/react";
+import { useView } from "./ViewContext";
 import { useTableContext } from "./TableContext";
 import { useSortContext } from "./SortContext";
 import { useFilterContext } from "./FilterContext";
 import { useSearchContext } from "./SearchContext";
 import { useHiddenFields } from "./HiddenFieldsContext";
+import { useLoadedRows } from "./LoadedRowsContext";
 
 // Added strong types for table row shape and cell value
 type CellValue = { value: string; cellId?: string; columnId: string; rowId: string };
@@ -33,13 +35,24 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
   const utils = api.useUtils();
   const { sortRules } = useSortContext();
   const { filterRules } = useFilterContext();
+  const { currentViewId } = useView();
   const { searchResults, currentResultIndex } = useSearchContext();
   const { isFieldHidden } = useHiddenFields();
+  const { setLoadedRows } = useLoadedRows();
   const inputRef = useRef<HTMLInputElement>(null);
   const currentValueRef = useRef<string>("");
   const listRef = useRef<HTMLDivElement>(null);
   const [scrollMargin, setScrollMargin] = useState(0);
   
+  // When switching views, clear cached pages and reset scroll so the table reflects that view's persisted rules
+  useEffect(() => {
+    if (!currentViewId) return;
+    void utils.table.getTableDataPaginated.invalidate();
+    requestAnimationFrame(() => {
+      virtualizer.scrollToIndex(0, { align: 'start' });
+    });
+  }, [currentViewId]);
+
   const [editingCell, setEditingCell] = useState<{
     rowId: string;
     columnId: string;
@@ -58,22 +71,14 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
   const { data: totalCountData } = api.table.getTableDataPaginated.useQuery(
     {
       tableId,
+      viewId: currentViewId ?? undefined,
       page: 0,
       pageSize: 1,
-      sortRules: sortRules.map(rule => ({
-        columnId: rule.columnId,
-        direction: rule.direction
-      })),
-      filterRules: filterRules.map(rule => ({
-        columnId: rule.columnId,
-        operator: rule.operator,
-        value: rule.value
-      }))
     },
     { 
       enabled: !!tableId,
-      staleTime: 5000, // Reduced cache time for more responsive updates during bulk operations
-      refetchInterval: 2000, // Auto-refetch every 2 seconds during bulk operations
+      staleTime: 5000,
+      refetchInterval: false,
     }
   );
 
@@ -83,11 +88,11 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
   
   useEffect(() => {
     const t = totalCountData?.pagination?.totalRows;
-    if (typeof t === 'number') { 
-      prevTotalRef.current = t; 
-      setStableTotal(t); 
+    if (typeof t === 'number') {
+      if (stableTotal !== t) setStableTotal(t);
+      prevTotalRef.current = t;
     }
-  }, [totalCountData?.pagination?.totalRows]);
+  }, [totalCountData?.pagination?.totalRows, stableTotal]);
 
   const countForVirtualizer = stableTotal ?? prevTotalRef.current ?? 0;
   const totalRows = countForVirtualizer;
@@ -118,7 +123,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
   const virtualizer = useWindowVirtualizer({
     count: totalRows,
     estimateSize: () => ROW_HEIGHT,
-    overscan: 80, // Increased overscan for ultra-tall screens and smoother loading
+    overscan: 48,
     scrollMargin,
   });
 
@@ -129,6 +134,9 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
   
   const startPage = Math.floor(startIndex / PAGE_SIZE);
   const endPage = Math.floor(endIndex / PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(totalRows / PAGE_SIZE));
+  const safeStartPage = Math.min(Math.max(0, startPage), totalPages - 1);
+  const safeEndPage = Math.min(Math.max(0, endPage), totalPages - 1);
 
   // Debug logging
   console.log('Virtualizer range:', { startIndex, endIndex, startPage, endPage, totalRows, virtualizerRange: virtualizerRange.length });
@@ -141,77 +149,56 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
   const { data: tableData, isLoading } = api.table.getTableDataPaginated.useQuery(
     {
       tableId,
-      page: startPage,
+      viewId: currentViewId,
+      page: safeStartPage,
       pageSize: PAGE_SIZE,
-      sortRules: sortRules.map(rule => ({
-        columnId: rule.columnId,
-        direction: rule.direction
-      })),
-      filterRules: filterRules.map(rule => ({
-        columnId: rule.columnId,
-        operator: rule.operator,
-        value: rule.value
-      }))
+      sortRules: sortRules.length ? sortRules.map(rule => ({ columnId: rule.columnId, direction: rule.direction })) : undefined,
+      filterRules: filterRules.length ? filterRules.map(rule => ({ columnId: rule.columnId, operator: rule.operator as any, value: rule.value })) : undefined,
     },
     { 
-      enabled: !!tableId && totalRows > 0 && startPage >= 0,
-      staleTime: 1000, // Further reduced stale time for ultra-responsive updates during bulk operations
-      placeholderData: (prev) => prev, // Keep previous data while loading to prevent flicker
+      enabled: !!tableId && totalRows > 0 && safeStartPage >= 0,
+      staleTime: 600000,
       refetchOnWindowFocus: false,
-      refetchInterval: 1000, // Auto-refetch every second during bulk operations
+      placeholderData: (prev) => prev, // Keep previous page data to prevent unmounting
     }
   );
 
   // Load the page that contains the tail of the visible window
-  const needEndPage = endPage > startPage;
+  const needEndPage = safeEndPage > safeStartPage;
   const { data: endPageData } = api.table.getTableDataPaginated.useQuery(
     {
       tableId,
-      page: endPage,
+      viewId: currentViewId,
+      page: safeEndPage,
       pageSize: PAGE_SIZE,
-      sortRules: sortRules.map(rule => ({
-        columnId: rule.columnId,
-        direction: rule.direction
-      })),
-      filterRules: filterRules.map(rule => ({
-        columnId: rule.columnId,
-        operator: rule.operator,
-        value: rule.value
-      }))
+      sortRules: sortRules.length ? sortRules.map(rule => ({ columnId: rule.columnId, direction: rule.direction })) : undefined,
+      filterRules: filterRules.length ? filterRules.map(rule => ({ columnId: rule.columnId, operator: rule.operator as any, value: rule.value })) : undefined,
     },
     { 
       enabled: !!tableId && totalRows > 0 && needEndPage,
-      staleTime: 1000, // Further reduced stale time for ultra-responsive updates during bulk operations
-      placeholderData: (prev) => prev, // Keep previous data while loading to prevent flicker
+      staleTime: 600000,
       refetchOnWindowFocus: false,
-      refetchInterval: 1000, // Auto-refetch every second during bulk operations
+      placeholderData: (prev) => prev, // Keep previous page data to prevent unmounting
     }
   );
 
-  // Load the middle page when the range spans 2+ pages
-  const needMidPage = endPage - startPage >= 2;
-  const midPage = startPage + 1;
+  // Load the page that contains the tail of the visible window
+  const needMidPage = safeEndPage - safeStartPage >= 2;
+  const midPage = safeStartPage + 1;
   const { data: midPageData } = api.table.getTableDataPaginated.useQuery(
     {
       tableId,
+      viewId: currentViewId,
       page: midPage,
       pageSize: PAGE_SIZE,
-      sortRules: sortRules.map(rule => ({
-        columnId: rule.columnId,
-        direction: rule.direction
-      })),
-      filterRules: filterRules.map(rule => ({
-        columnId: rule.columnId,
-        operator: rule.operator,
-        value: rule.value
-      }))
+      sortRules: sortRules.length ? sortRules.map(rule => ({ columnId: rule.columnId, direction: rule.direction })) : undefined,
+      filterRules: filterRules.length ? filterRules.map(rule => ({ columnId: rule.columnId, operator: rule.operator as any, value: rule.value })) : undefined,
     },
     { 
       enabled: !!tableId && totalRows > 0 && needMidPage,
-      staleTime: 1000, // Further reduced stale time for ultra-responsive updates during bulk operations
-      placeholderData: (prev) => prev, // Keep previous data while loading to prevent flicker
+      staleTime: 600000,
       refetchOnWindowFocus: false,
-      refetchInterval: 1000, // Auto-refetch every second during bulk operations
+      placeholderData: (prev) => prev, // Keep previous page data to prevent unmounting
     }
   );
 
@@ -219,26 +206,49 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
   const { data: prevPageData } = api.table.getTableDataPaginated.useQuery(
     {
       tableId,
-      page: Math.max(0, startPage - 1),
+      viewId: currentViewId,
+      page: Math.max(0, safeStartPage - 1),
       pageSize: PAGE_SIZE,
-      sortRules: sortRules.map(rule => ({
-        columnId: rule.columnId,
-        direction: rule.direction
-      })),
-      filterRules: filterRules.map(rule => ({
-        columnId: rule.columnId,
-        operator: rule.operator,
-        value: rule.value
-      }))
+      sortRules: sortRules.length ? sortRules.map(rule => ({ columnId: rule.columnId, direction: rule.direction })) : undefined,
+      filterRules: filterRules.length ? filterRules.map(rule => ({ columnId: rule.columnId, operator: rule.operator as any, value: rule.value })) : undefined,
     },
     { 
-      enabled: !!tableId && totalRows > 0 && startPage > 0,
-      staleTime: 1000, // Further reduced stale time for ultra-responsive updates during bulk operations
-      placeholderData: (prev) => prev, // Keep previous data while loading to prevent flicker
+      enabled: !!tableId && totalRows > 0 && safeStartPage > 0,
+      staleTime: 600000,
       refetchOnWindowFocus: false,
-      refetchInterval: 1000, // Auto-refetch every second during bulk operations
+      placeholderData: (prev) => prev, // Keep previous page data to prevent unmounting
     }
   );
+
+  // Reset cached pages when the table/view/sort/filter signature changes
+  const sortFilterSig = useMemo(
+    () => JSON.stringify({
+      tableId,
+      viewId: currentViewId,
+      sort: sortRules.map(r => ({ columnId: r.columnId, direction: r.direction })),
+      filter: filterRules.map(r => ({ columnId: r.columnId, operator: r.operator, value: r.value })),
+    }),
+    [tableId, currentViewId, sortRules, filterRules]
+  );
+  const prevSigRef = useRef(sortFilterSig);
+  useEffect(() => {
+    if (prevSigRef.current !== sortFilterSig) {
+      // Invalidate cached pages for this table/view; they will be refetched with new sort/filter
+      void utils.table.getTableDataPaginated.invalidate();
+      prevSigRef.current = sortFilterSig;
+    }
+  }, [sortFilterSig, utils.table.getTableDataPaginated]);
+
+  // Keep last known table schema so the table shell never unmounts during page transitions
+  type TableMeta = NonNullable<typeof tableData>["table"];
+  const tableMetaRef = useRef<TableMeta | null>(null);
+  useEffect(() => {
+    if (tableData?.table) tableMetaRef.current = tableData.table;
+    if (prevPageData?.table) tableMetaRef.current = prevPageData.table;
+    if (midPageData?.table) tableMetaRef.current = midPageData.table;
+    if (endPageData?.table) tableMetaRef.current = endPageData.table;
+  }, [tableData?.table, prevPageData?.table, midPageData?.table, endPageData?.table]);
+  const tableMeta = tableMetaRef.current;
 
   // Combine all loaded data (current + middle + end + previous pages)
   const allRows = useMemo(() => {
@@ -247,53 +257,68 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
       order: number;
       cells: Array<{ columnId: string; value: string; id?: string }>;
     }> = [];
-    
-    // Add previous page rows if available
-    if (prevPageData?.rows) {
-      rows.push(...prevPageData.rows);
-    }
-    
-    // Add current page rows
-    if (tableData?.rows) {
-      rows.push(...tableData.rows);
-    }
-    
-    // Add middle page rows if available
-    if (midPageData?.rows) {
-      rows.push(...midPageData.rows);
-    }
-    
-    // Add end page rows if available
-    if (endPageData?.rows) {
-      rows.push(...endPageData.rows);
-    }
-    
+    if (prevPageData?.rows) rows.push(...prevPageData.rows);
+    if (tableData?.rows) rows.push(...tableData.rows);
+    if (midPageData?.rows) rows.push(...midPageData.rows);
+    if (endPageData?.rows) rows.push(...endPageData.rows);
     return rows;
   }, [tableData?.rows, midPageData?.rows, endPageData?.rows, prevPageData?.rows]);
 
-  // O(1) lookup map instead of O(n) .find() calls
-  const rowByOrder = useMemo(() => {
-    const m = new Map<number, typeof allRows[number]>();
-    for (const r of allRows) m.set(r.order, r);
-    return m;
-  }, [allRows]);
+  // Map absolute virtual index -> row from loaded pages, respecting server sort order
+  const indexToRow = useMemo(() => {
+    const map = new Map<number, typeof allRows[number]>();
+    const attach = (data?: typeof tableData) => {
+      const page = data?.pagination?.page;
+      if (!data?.rows || typeof page !== 'number') return;
+      for (let i = 0; i < data.rows.length; i++) {
+        map.set(page * PAGE_SIZE + i, data.rows[i]!);
+      }
+    };
+    attach(prevPageData);
+    attach(tableData);
+    attach(midPageData);
+    attach(endPageData);
+    return map;
+  }, [
+    prevPageData?.pagination?.page,
+    tableData?.pagination?.page,
+    midPageData?.pagination?.page,
+    endPageData?.pagination?.page,
+    prevPageData?.rows,
+    tableData?.rows,
+    midPageData?.rows,
+    endPageData?.rows,
+  ]);
+
+  // Update loaded rows context with current data
+  useEffect(() => {
+    if (tableData?.table && allRows.length > 0) {
+      const loadedRowsData = allRows.map(row => ({
+        id: row.id,
+        order: row.order,
+        cells: row.cells.map(cell => ({
+          columnId: cell.columnId,
+          value: cell.value,
+          column: {
+            id: cell.columnId,
+            name: tableMeta?.columns.find(col => col.id === cell.columnId)?.name ?? ''
+          }
+        }))
+      }));
+      setLoadedRows(loadedRowsData);
+    }
+  }, [allRows, tableData?.table, setLoadedRows]);
+
+  // No longer rely on base row.order; use absolute index mapping to reflect sorted order
 
   const updateCellMutation = api.table.updateCell.useMutation({
     onMutate: async ({ tableId, rowId, columnId, value }) => {
       // Cancel any outgoing refetches
       await utils.table.getTableDataPaginated.cancel({ 
         tableId,
+        viewId: currentViewId,
         page: startPage,
         pageSize: PAGE_SIZE,
-        sortRules: sortRules.map(rule => ({
-          columnId: rule.columnId,
-          direction: rule.direction
-        })),
-        filterRules: filterRules.map(rule => ({
-          columnId: rule.columnId,
-          operator: rule.operator,
-          value: rule.value
-        }))
       });
       
       // Update local state immediately for instant UI feedback
@@ -303,17 +328,9 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
       // Snapshot the previous value
       const previousData = utils.table.getTableDataPaginated.getData({ 
         tableId,
+        viewId: currentViewId,
         page: startPage,
         pageSize: PAGE_SIZE,
-        sortRules: sortRules.map(rule => ({
-          columnId: rule.columnId,
-          direction: rule.direction
-        })),
-        filterRules: filterRules.map(rule => ({
-          columnId: rule.columnId,
-          operator: rule.operator,
-          value: rule.value
-        }))
       });
       return { previousData };
     },
@@ -322,17 +339,9 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
       if (context?.previousData) {
         utils.table.getTableDataPaginated.setData({ 
           tableId,
+          viewId: currentViewId,
           page: startPage,
           pageSize: PAGE_SIZE,
-          sortRules: sortRules.map(rule => ({
-            columnId: rule.columnId,
-            direction: rule.direction
-          })),
-          filterRules: filterRules.map(rule => ({
-            columnId: rule.columnId,
-            operator: rule.operator,
-            value: rule.value
-          }))
         }, context.previousData);
       }
     },
@@ -347,6 +356,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
       // Cancel any outgoing refetches
       await utils.table.getTableDataPaginated.cancel({ 
         tableId,
+        viewId: currentViewId,
         page: startPage,
         pageSize: PAGE_SIZE,
         sortRules: sortRules.map(rule => ({
@@ -355,7 +365,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
         })),
         filterRules: filterRules.map(rule => ({
           columnId: rule.columnId,
-          operator: rule.operator,
+          operator: rule.operator as "contains" | "does not contain" | "is" | "is not" | "is empty" | "is not empty",
           value: rule.value
         }))
       });
@@ -363,6 +373,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
       // Snapshot the previous value
       const previousData = utils.table.getTableDataPaginated.getData({ 
         tableId,
+        viewId: currentViewId,
         page: startPage,
         pageSize: PAGE_SIZE,
         sortRules: sortRules.map(rule => ({
@@ -371,7 +382,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
         })),
         filterRules: filterRules.map(rule => ({
           columnId: rule.columnId,
-          operator: rule.operator,
+          operator: rule.operator as "contains" | "does not contain" | "is" | "is not" | "is empty" | "is not empty",
           value: rule.value
         }))
       });
@@ -382,6 +393,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
       if (context?.previousData) {
         utils.table.getTableDataPaginated.setData({ 
           tableId,
+          viewId: currentViewId,
           page: startPage,
           pageSize: PAGE_SIZE,
           sortRules: sortRules.map(rule => ({
@@ -390,7 +402,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
           })),
           filterRules: filterRules.map(rule => ({
             columnId: rule.columnId,
-            operator: rule.operator,
+            operator: rule.operator as "contains" | "does not contain" | "is" | "is not" | "is empty" | "is not empty",
             value: rule.value
         }))
         }, context.previousData);
@@ -415,6 +427,35 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
       void utils.table.getTableDataPaginated.invalidate();
     },
   });
+
+  const reorderRowsMutation = api.table.reorderRows.useMutation({
+    onSuccess: () => {
+      console.log("Rows reordered, invalidating cache...");
+      void utils.table.getTableDataPaginated.invalidate({ tableId, viewId: currentViewId });
+    },
+  });
+
+  // Handle row reordering
+  const handleMoveRow = useCallback((rowId: string, direction: 'up' | 'down') => {
+    if (!currentViewId || !allRows) return;
+    
+    const currentIndex = allRows.findIndex(row => row.id === rowId);
+    if (currentIndex === -1) return;
+    
+    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= allRows.length) return;
+    
+    const targetRowId = allRows[targetIndex]?.id;
+    if (!targetRowId) return;
+    
+    console.log(`Moving row ${rowId} ${direction} to swap with ${targetRowId}`);
+    reorderRowsMutation.mutate({
+      viewId: currentViewId,
+      tableId,
+      aRowId: rowId,
+      bRowId: targetRowId,
+    });
+  }, [currentViewId, allRows, reorderRowsMutation, tableId]);
 
   // Helper function to check if a cell should be highlighted
   const isCellHighlighted = useCallback((rowId: string, columnId: string) => {
@@ -491,21 +532,21 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
 
   // Transform table data to the format expected by the table
   const tableRows = useMemo(() => {
-    if (!tableData?.table || !allRows) return [];
+    if (!tableMeta || !allRows) return [];
 
     return allRows.map((row) => {
       const rowRecord: RowRecord = {};
       
-      // Add row number column
+      // Add row number column - use virtual index instead of global row.order
       rowRecord['row-number'] = {
-        value: (row.order + 1).toString(),
+        value: '', // Will be set by the column renderer using virtual index
         cellId: `row-${row.id}`,
         columnId: 'row-number',
         rowId: row.id
       };
       
       // Add data columns
-      tableData.table.columns.forEach((column) => {
+      tableMeta.columns.forEach((column) => {
         if (isFieldHidden(column.id)) return;
         
         const cell = row.cells.find((c: { columnId: string }) => c.columnId === column.id);
@@ -521,7 +562,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
       
       return rowRecord;
     });
-  }, [tableData?.table, allRows, isFieldHidden]);
+  }, [tableMeta, allRows, isFieldHidden]);
 
 
 
@@ -537,10 +578,42 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
              header: () => <div className="px-2 py-1 font-medium text-gray-700">#</div>,
        accessorKey: 'row-number',
        cell: ({ row }) => {
-         const cellData = row.getValue<CellValue>('row-number');
+         // Get the row ID from the allRows array using the virtual index
+         const rowData = allRows?.[row.index];
+         const rowId = rowData?.id;
+         const isFirstRow = row.index === 0;
+         const isLastRow = row.index === (allRows?.length ?? 0) - 1;
+         
+         // Don't render move buttons if we don't have a valid row ID
+         if (!rowId) {
+           return (
+             <div className="px-2 py-1 text-xs text-gray-500 font-mono">
+               {row.index + 1}
+             </div>
+           );
+         }
+         
          return (
-           <div className="px-2 py-1 text-xs text-gray-500 font-mono">
-             {cellData.value}
+           <div className="px-2 py-1 text-xs text-gray-500 font-mono flex items-center gap-1">
+             <span>{row.index + 1}</span>
+             <div className="flex flex-col">
+               <button
+                 onClick={() => handleMoveRow(rowId, 'up')}
+                 disabled={isFirstRow}
+                 className={`w-3 h-3 text-xs ${isFirstRow ? 'text-gray-300 cursor-not-allowed' : 'text-gray-500 hover:text-gray-700 cursor-pointer'}`}
+                 title="Move row up"
+               >
+                 ↑
+               </button>
+               <button
+                 onClick={() => handleMoveRow(rowId, 'down')}
+                 disabled={isLastRow}
+                 className={`w-3 h-3 text-xs ${isLastRow ? 'text-gray-300 cursor-not-allowed' : 'text-gray-500 hover:text-gray-700 cursor-pointer'}`}
+                 title="Move row down"
+               >
+                 ↓
+               </button>
+             </div>
            </div>
          );
        },
@@ -549,10 +622,10 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
        maxSize: 40,
     };
 
-         // Data columns
-     const dataColumns: ColumnDef<RowRecord>[] = tableData.table.columns
-       .filter(column => !isFieldHidden(column.id))
-       .map((column) => ({
+           // Data columns
+  const dataColumns: ColumnDef<RowRecord>[] = tableMeta?.columns
+    ?.filter(column => !isFieldHidden(column.id))
+    .map((column) => ({
          id: column.id,
          header: () => (
                        <div 
@@ -690,7 +763,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                                                            size: 250, // Fixed width for all data columns
                     minSize: 250,
                     maxSize: 250,
-       }));
+       })) ?? [];
 
     // Return row number column + data columns
     return [rowNumberColumn, ...dataColumns];
@@ -751,8 +824,25 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
     );
   }
 
-  if (!tableData) {
-    return <div className="flex items-center justify-center h-64">No data available</div>;
+  // Only show empty state if the table really has 0 rows
+  if (totalRows === 0) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <p className="text-gray-500 mb-4">No data available</p>
+          <button
+            onClick={() => {
+              if (!tableId) return;
+              void addRowMutation.mutate({ tableId });
+            }}
+            disabled={addRowMutation.isPending}
+            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50"
+          >
+            {addRowMutation.isPending ? "Adding..." : "Add your first row"}
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -766,7 +856,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
           </div>
           
           {/* Data column headers */}
-          {tableData.table.columns
+          {tableMeta?.columns
             .filter(column => !isFieldHidden(column.id))
             .map((column) => (
               <div 
@@ -844,7 +934,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
           className="border-l border-b border-gray-200"
           style={{ 
             height: `${virtualizer.getTotalSize()}px`,
-            width: `${40 + (tableData.table.columns.filter(col => !isFieldHidden(col.id)).length * 250)}px`,
+            width: `${40 + (tableMeta?.columns.filter(col => !isFieldHidden(col.id)).length ?? 0) * 250}px`,
             position: 'relative',
             overflow: 'hidden', // Prevent any internal scrolling
             maxHeight: 'none' // Ensure no max-height constraints
@@ -852,9 +942,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
         >
            {virtualizer.getVirtualItems().map((virtualRow) => {
              const rowIndex = virtualRow.index;
-             
-                           // Use O(1) lookup instead of O(n) search
-              const row = rowByOrder.get(rowIndex);
+             const row = indexToRow.get(rowIndex);
              
              if (!row) {
                return (
@@ -891,7 +979,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                      </div>
                    
                                         {/* Data cells */}
-                     {tableData.table.columns
+                     {tableMeta?.columns
                        .filter(column => !isFieldHidden(column.id))
                        .map((column) => {
                          const cell = row.cells.find((c: { columnId: string }) => c.columnId === column.id);
@@ -994,7 +1082,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
        {/* Add row button */}
        <div 
          className="border border-gray-200 border-t-0 bg-gray-50 h-9 flex items-center justify-center"
-         style={{ width: `${40 + (tableData.table.columns.filter(col => !isFieldHidden(col.id)).length * 250)}px` }}
+         style={{ width: `${40 + (tableMeta?.columns.filter(col => !isFieldHidden(col.id)).length ?? 0) * 250}px` }}
        >
          <button
            onClick={() => {

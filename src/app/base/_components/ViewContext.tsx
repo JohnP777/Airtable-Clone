@@ -1,129 +1,49 @@
 "use client";
 
-import React, { createContext, useContext, useState } from "react";
-import type { ReactNode } from "react";
+import React, { createContext, useContext, useMemo, useState, useEffect } from "react";
+import { api } from "../../../trpc/react";
+import { useTableContext } from "./TableContext";
 
-export interface View {
-  id: string;
-  name: string;
-  type: "grid";
-  sortRules: Array<{ id: string; columnId: string; direction: "asc" | "desc" }>;
-  filterRules: Array<{ id: string; columnId: string; operator: string; value: string }>;
-  hiddenFields: Set<string>;
-  searchTerm: string;
-  searchResults: Array<{ type: "field" | "cell"; rowId?: string; columnId: string; value: string; columnName: string }>;
-  currentResultIndex: number;
-  isSearchActive: boolean;
-}
+type Ctx = {
+  views: Array<{ id: string; name: string; order: number; type: string }>;
+  currentViewId: string; // Never null
+  switchView: (id: string) => void;
+  createView: (name?: string) => Promise<void>;
+};
 
-interface ViewContextType {
-  views: View[];
-  currentViewId: string;
-  currentView: View | null;
-  createView: (name: string) => void;
-  switchView: (viewId: string) => void;
-  updateView: (viewId: string, updates: Partial<View>) => void;
-  deleteView: (viewId: string) => void;
-  getViewSettings: (viewId: string) => View | null;
-}
+const ViewContext = createContext<Ctx | null>(null);
+export const useView = () => {
+  const v = useContext(ViewContext);
+  if (!v) throw new Error("useView must be used within ViewProvider");
+  return v;
+};
 
-const ViewContext = createContext<ViewContextType | undefined>(undefined);
+export function ViewProvider({ baseId, children }: { baseId: string; children: React.ReactNode }) {
+  const utils = api.useUtils();
+  const { selectedTableId } = useTableContext();
+  const list = api.table.listViews.useQuery({ tableId: selectedTableId! }, { enabled: !!selectedTableId });
+  const create = api.table.createView.useMutation();
+  const [currentViewId, setCurrentViewId] = useState<string | null>(null);
 
-export function useView() {
-  const context = useContext(ViewContext);
-  if (context === undefined) {
-    throw new Error("useView must be used within a ViewProvider");
-  }
-  return context;
-}
+  // Initialize current view to first one
+  useEffect(() => {
+    if (!currentViewId && list.data?.[0]) setCurrentViewId(list.data[0].id);
+  }, [list.data, currentViewId]);
 
-interface ViewProviderProps {
-  children: ReactNode;
-  baseId: string;
-}
+  // Ensure we always have a valid viewId
+  const effectiveViewId = currentViewId || list.data?.[0]?.id || 'default-view';
 
-export function ViewProvider({ children, baseId }: ViewProviderProps) {
-  const [views, setViews] = useState<View[]>(() => {
-    // Initialize with a default view
-    const defaultView: View = {
-      id: `${baseId}-view-1`,
-      name: "Grid view",
-      type: "grid",
-      sortRules: [],
-      filterRules: [],
-      hiddenFields: new Set(),
-      searchTerm: "",
-      searchResults: [],
-      currentResultIndex: 0,
-      isSearchActive: false,
-    };
-    return [defaultView];
-  });
+  const value = useMemo<Ctx>(() => ({
+    views: list.data ?? [],
+    currentViewId: effectiveViewId,
+    switchView: setCurrentViewId,
+    createView: async (name?: string) => {
+      if (!selectedTableId) return;
+      const v = await create.mutateAsync({ tableId: selectedTableId, name });
+      await utils.table.listViews.invalidate({ tableId: selectedTableId });
+      setCurrentViewId(v.id);
+    },
+  }), [list.data, effectiveViewId, selectedTableId, create, utils.table.listViews]);
 
-  const [currentViewId, setCurrentViewId] = useState<string>(`${baseId}-view-1`);
-
-  const currentView = views.find(view => view.id === currentViewId) ?? null;
-
-  const createView = (name: string) => {
-    const newViewNumber = views.length + 1;
-    const newView: View = {
-      id: `${baseId}-view-${newViewNumber}`,
-      name: name ?? `Grid view ${newViewNumber}`,
-      type: "grid",
-      sortRules: [],
-      filterRules: [],
-      hiddenFields: new Set(),
-      searchTerm: "",
-      searchResults: [],
-      currentResultIndex: 0,
-      isSearchActive: false,
-    };
-    setViews(prev => [...prev, newView]);
-    setCurrentViewId(newView.id);
-  };
-
-  const switchView = (viewId: string) => {
-    setCurrentViewId(viewId);
-  };
-
-  const updateView = (viewId: string, updates: Partial<View>) => {
-    setViews(prev => prev.map(view => 
-      view.id === viewId ? { ...view, ...updates } : view
-    ));
-  };
-
-  const deleteView = (viewId: string) => {
-    if (views.length <= 1) return; // Don't delete the last view
-    
-    setViews(prev => prev.filter(view => view.id !== viewId));
-    
-    // If we deleted the current view, switch to the first available view
-    if (currentViewId === viewId) {
-      const remainingViews = views.filter(view => view.id !== viewId);
-      if (remainingViews.length > 0 && remainingViews[0]) {
-        setCurrentViewId(remainingViews[0].id);
-      }
-    }
-  };
-
-  const getViewSettings = (viewId: string) => {
-    return views.find(view => view.id === viewId) ?? null;
-  };
-
-  const value: ViewContextType = {
-    views,
-    currentViewId,
-    currentView,
-    createView,
-    switchView,
-    updateView,
-    deleteView,
-    getViewSettings,
-  };
-
-  return (
-    <ViewContext.Provider value={value}>
-      {children}
-    </ViewContext.Provider>
-  );
+  return <ViewContext.Provider value={value}>{children}</ViewContext.Provider>;
 }

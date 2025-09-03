@@ -90,6 +90,9 @@ model TableRow {
 
     cells    TableCell[]
 
+    // Per-view manual row ordering
+    viewOrders ViewRowOrder[]
+
     @@index([tableId])
     @@index([tableId, order])
 }
@@ -124,8 +127,60 @@ model View {
     table    Table  @relation(fields: [tableId], references: [id], onDelete: Cascade)
     tableId  String
 
+    // Optional generic config JSON for future (hidden columns, etc.)
+    config   Json?
+
+    // Per-view hidden fields
+    hiddenFields String[] @default([])
+
+    // Per-view persistent rules
+    sortRules   ViewSortRule[]
+    filterRules ViewFilterRule[]
+
+    // Per-view manual row ordering
+    rowOrders ViewRowOrder[]
+
     @@index([tableId])
     @@index([tableId, order])
+}
+
+model ViewRowOrder {
+    viewId   String
+    rowId    String
+    position Int
+
+    view View     @relation(fields: [viewId], references: [id], onDelete: Cascade)
+    row  TableRow @relation(fields: [rowId], references: [id], onDelete: Cascade)
+
+    @@id([viewId, rowId])
+    @@index([viewId, position])
+}
+
+model ViewSortRule {
+    id        String @id @default(cuid())
+    viewId    String
+    columnId  String
+    direction String // "asc" | "desc"
+    order     Int
+
+    view View @relation(fields: [viewId], references: [id], onDelete: Cascade)
+
+    @@index([viewId, order])
+    @@index([viewId, columnId])
+}
+
+model ViewFilterRule {
+    id        String @id @default(cuid())
+    viewId    String
+    columnId  String
+    operator  String // e.g. contains | does not contain | is | is not | is empty | is not empty
+    value     String
+    order     Int
+
+    view View @relation(fields: [viewId], references: [id], onDelete: Cascade)
+
+    @@index([viewId, order])
+    @@index([viewId, columnId])
 }
 
 // Necessary for Next auth

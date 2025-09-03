@@ -101,7 +101,7 @@ export function BulkAddRowsButton() {
     try {
       await addBulkRowsMutation.mutateAsync({ 
         tableId: selectedTableId, 
-        rowCount: 10000 
+        rowCount: 100000 
       });
     } catch (error) {
       console.error("Failed to add bulk rows:", error);
@@ -117,9 +117,9 @@ export function BulkAddRowsButton() {
       onClick={handleAddBulkRows}
       disabled={isAdding || addBulkRowsMutation.isPending}
       className="px-3 py-1 text-xs bg-green-500 text-white rounded border border-green-600 shadow-sm hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-      title="Add 10,000 rows with fake data (optimized for speed)"
+      title="Add 100,000 rows with fake data (optimized for speed)"
     >
-      {isAdding || addBulkRowsMutation.isPending ? "Adding..." : "Add 10k rows"}
+      {isAdding || addBulkRowsMutation.isPending ? "Adding..." : "Add 100k rows"}
     </button>
   );
 }

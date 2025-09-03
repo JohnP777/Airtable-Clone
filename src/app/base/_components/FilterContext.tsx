@@ -1,87 +1,42 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
-import type { ReactNode } from "react";
+import React, { createContext, useContext, useMemo, useState } from "react";
 import { useView } from "./ViewContext";
 
-interface FilterRule {
-  id: string;
+export type FilterRule = {
   columnId: string;
-  operator: string;
+  operator: "contains" | "does not contain" | "is" | "is not" | "is empty" | "is not empty";
   value: string;
-}
+};
 
-interface FilterContextType {
+type Ctx = {
   filterRules: FilterRule[];
   setFilterRules: (rules: FilterRule[]) => void;
-  addFilterRule: (rule: FilterRule) => void;
-  removeFilterRule: (ruleId: string) => void;
-  updateFilterRule: (ruleId: string, field: keyof FilterRule, value: string) => void;
   clearFilterRules: () => void;
+};
+
+const FilterContext = createContext<Ctx | null>(null);
+
+export function useFilterContext() {
+  const v = useContext(FilterContext);
+  if (!v) throw new Error("useFilterContext must be used within FilterProvider");
+  return v;
 }
 
-const FilterContext = createContext<FilterContextType | undefined>(undefined);
-
 interface FilterProviderProps {
-  children: ReactNode;
+  children: React.ReactNode;
 }
 
 export function FilterProvider({ children }: FilterProviderProps) {
-  const { currentView, updateView } = useView();
-  const [filterRules, setFilterRules] = useState<FilterRule[]>([]);
+  const { currentViewId } = useView();
+  const [byView, setByView] = useState<Record<string, FilterRule[]>>({});
 
-  // Sync with current view's filter rules
-  useEffect(() => {
-    if (currentView) {
-      setFilterRules(currentView.filterRules);
-    }
-  }, [currentView?.id]);
+  const filterRules = byView[currentViewId ?? ''] ?? [];
+  const setFilterRules = (rules: FilterRule[]) =>
+    setByView(prev => ({ ...prev, [currentViewId ?? '']: rules }));
+  const clearFilterRules = () =>
+    setByView(prev => ({ ...prev, [currentViewId ?? '']: [] }));
 
-  // Update view when filter rules change
-  useEffect(() => {
-    if (currentView) {
-      updateView(currentView.id, { filterRules });
-    }
-  }, [filterRules, currentView?.id]);
-
-  const addFilterRule = (rule: FilterRule) => {
-    setFilterRules(prev => [...prev, rule]);
-  };
-
-  const removeFilterRule = (ruleId: string) => {
-    setFilterRules(prev => prev.filter(rule => rule.id !== ruleId));
-  };
-
-  const updateFilterRule = (ruleId: string, field: keyof FilterRule, value: string) => {
-    setFilterRules(prev => prev.map(rule => 
-      rule.id === ruleId 
-        ? { ...rule, [field]: value }
-        : rule
-    ));
-  };
-
-  const clearFilterRules = () => {
-    setFilterRules([]);
-  };
-
-  return (
-    <FilterContext.Provider value={{
-      filterRules,
-      setFilterRules,
-      addFilterRule,
-      removeFilterRule,
-      updateFilterRule,
-      clearFilterRules
-    }}>
-      {children}
-    </FilterContext.Provider>
-  );
-}
-
-export function useFilterContext() {
-  const context = useContext(FilterContext);
-  if (context === undefined) {
-    throw new Error("useFilterContext must be used within a FilterProvider");
-  }
-  return context;
+  const value = useMemo(() => ({ filterRules, setFilterRules, clearFilterRules }), [filterRules]);
+  return <FilterContext.Provider value={value}>{children}</FilterContext.Provider>;
 }

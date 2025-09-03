@@ -5,6 +5,7 @@ import { api } from "../../../trpc/react";
 import { VirtualizedDataTable } from "./VirtualizedDataTable";
 import { ViewSidebar } from "./ViewSidebar";
 import { useTableContext } from "./TableContext";
+import { useView } from "./ViewContext";
 
 interface BaseContentProps {
   baseId: string;
@@ -13,6 +14,7 @@ interface BaseContentProps {
 export function BaseContent({ baseId }: BaseContentProps) {
   const { data: tables, isLoading } = api.table.list.useQuery({ baseId });
   const { selectedTableId } = useTableContext();
+  const { currentViewId } = useView();
 
   if (isLoading) {
     return null;
@@ -37,7 +39,7 @@ export function BaseContent({ baseId }: BaseContentProps) {
       </div>
       <div className="flex-1 ml-56">
         <div className="p-4">
-          <VirtualizedDataTable tableId={selectedTable.id} />
+          <VirtualizedDataTable key={currentViewId} tableId={selectedTable.id} />
         </div>
       </div>
     </div>

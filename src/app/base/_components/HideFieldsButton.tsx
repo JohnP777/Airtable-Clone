@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { api } from "../../../trpc/react";
 import { useTableContext } from "./TableContext";
 import { useHiddenFields } from "./HiddenFieldsContext";
+import { useView } from "./ViewContext";
 
 interface HideFieldsButtonProps {
   tableId: string;
@@ -13,12 +14,16 @@ export function HideFieldsButton({ tableId }: HideFieldsButtonProps) {
   const [showDropdown, setShowDropdown] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const { hiddenFields, setHiddenFields, hideAllFields, showAllFields } = useHiddenFields();
+  const { isFieldHidden, toggleFieldHidden, setHiddenFields, hiddenFieldIds } = useHiddenFields();
+  const { currentViewId } = useView();
 
-  // Get table data to show available columns
-  const { data: tableData } = api.table.getTableData.useQuery(
+  // Get table data to show available columns - use paginated version with minimal data
+  const { data: tableData } = api.table.getTableDataPaginated.useQuery(
     { 
       tableId,
+      viewId: currentViewId ?? undefined,
+      page: 0,
+      pageSize: 1, // Only need 1 row to get table structure
       sortRules: [],
       filterRules: []
     },
@@ -26,7 +31,7 @@ export function HideFieldsButton({ tableId }: HideFieldsButtonProps) {
   );
 
   // Filter fields based on search term
-  const filteredFields = tableData?.columns?.filter(column => 
+  const filteredFields = tableData?.table?.columns?.filter(column => 
     column.name.toLowerCase().includes(searchTerm.toLowerCase())
   ) ?? [];
 
@@ -34,20 +39,16 @@ export function HideFieldsButton({ tableId }: HideFieldsButtonProps) {
   const fieldsToShow = filteredFields.slice(1); // Skip the first column (primary field)
 
   const handleFieldToggle = (columnId: string) => {
-    if (hiddenFields.has(columnId)) {
-      setHiddenFields(new Set([...hiddenFields].filter(id => id !== columnId)));
-    } else {
-      setHiddenFields(new Set([...hiddenFields, columnId]));
-    }
+    toggleFieldHidden(columnId);
   };
 
   const handleHideAll = () => {
     const allFieldIds = fieldsToShow.map(field => field.id);
-    hideAllFields(allFieldIds);
+    setHiddenFields(allFieldIds);
   };
 
   const handleShowAll = () => {
-    showAllFields();
+    setHiddenFields([]);
   };
 
   const handleButtonClick = () => {
@@ -118,17 +119,17 @@ export function HideFieldsButton({ tableId }: HideFieldsButtonProps) {
                          <input
                            type="checkbox"
                            className="sr-only"
-                           checked={!hiddenFields.has(field.id)}
+                           checked={!isFieldHidden(field.id)}
                            onChange={() => handleFieldToggle(field.id)}
                          />
                          <div
                            className={`block w-8 h-5 rounded-full transition-colors duration-200 ease-in-out ${
-                             !hiddenFields.has(field.id) ? "bg-green-500" : "bg-gray-300"
+                             !isFieldHidden(field.id) ? "bg-green-500" : "bg-gray-300"
                            }`}
                          ></div>
                          <div
                            className={`dot absolute left-0.5 top-0.5 bg-white w-3.5 h-3.5 rounded-full transition-transform duration-200 ease-in-out ${
-                             !hiddenFields.has(field.id) ? "translate-x-full" : ""
+                             !isFieldHidden(field.id) ? "translate-x-full" : ""
                            }`}
                          ></div>
                        </div>

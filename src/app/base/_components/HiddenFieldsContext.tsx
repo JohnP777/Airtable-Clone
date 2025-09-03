@@ -1,88 +1,57 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
-import type { ReactNode } from "react";
+import React, { createContext, useContext, useMemo, useState, useCallback } from "react";
 import { useView } from "./ViewContext";
 
-interface HiddenFieldsContextType {
-  hiddenFields: Set<string>;
-  setHiddenFields: (fields: Set<string>) => void;
-  hideField: (fieldId: string) => void;
-  showField: (fieldId: string) => void;
-  hideAllFields: (fieldIds: string[]) => void;
-  showAllFields: () => void;
-  isFieldHidden: (fieldId: string) => boolean;
-}
+type Ctx = {
+  isFieldHidden: (id: string) => boolean;
+  toggleFieldHidden: (id: string) => void;
+  setHiddenFields: (ids: string[]) => void;
+  hiddenFieldIds: string[];
+};
 
-const HiddenFieldsContext = createContext<HiddenFieldsContextType | undefined>(undefined);
+const HiddenFieldsContext = createContext<Ctx | null>(null);
 
 export function useHiddenFields() {
-  const context = useContext(HiddenFieldsContext);
-  if (context === undefined) {
-    throw new Error("useHiddenFields must be used within a HiddenFieldsProvider");
-  }
-  return context;
+  const v = useContext(HiddenFieldsContext);
+  if (!v) throw new Error("useHiddenFields must be used within HiddenFieldsProvider");
+  return v;
 }
 
 interface HiddenFieldsProviderProps {
-  children: ReactNode;
+  children: React.ReactNode;
 }
 
 export function HiddenFieldsProvider({ children }: HiddenFieldsProviderProps) {
-  const { currentView, updateView } = useView();
-  const [hiddenFields, setHiddenFields] = useState<Set<string>>(new Set());
+  const { currentViewId } = useView();
+  const [byView, setByView] = useState<Record<string, Set<string>>>({});
 
-  // Sync with current view's hidden fields
-  useEffect(() => {
-    if (currentView) {
-      setHiddenFields(currentView.hiddenFields);
-    }
-  }, [currentView?.id]);
+  const setHiddenFields = useCallback((ids: string[]) => {
+    if (!currentViewId) return;
+    setByView(prev => ({ ...prev, [currentViewId!]: new Set(ids) }));
+  }, [currentViewId]);
 
-  // Update view when hidden fields change
-  useEffect(() => {
-    if (currentView) {
-      updateView(currentView.id, { hiddenFields });
-    }
-  }, [hiddenFields, currentView?.id]);
-
-  const hideField = (fieldId: string) => {
-    setHiddenFields(prev => new Set([...prev, fieldId]));
-  };
-
-  const showField = (fieldId: string) => {
-    setHiddenFields(prev => {
-      const newSet = new Set(prev);
-      newSet.delete(fieldId);
-      return newSet;
+  const toggleFieldHidden = useCallback((id: string) => {
+    if (!currentViewId) return;
+    setByView(prev => {
+      const set = new Set(prev[currentViewId!] ?? []);
+      set.has(id) ? set.delete(id) : set.add(id);
+      return { ...prev, [currentViewId!]: set };
     });
-  };
+  }, [currentViewId]);
 
-  const hideAllFields = (fieldIds: string[]) => {
-    setHiddenFields(new Set(fieldIds));
-  };
+  const hiddenSet = useMemo(() => {
+    if (!currentViewId) return new Set<string>();
+    return byView[currentViewId] ?? new Set<string>();
+  }, [byView, currentViewId]);
+  
+  const isFieldHidden = useCallback((id: string) => hiddenSet.has(id), [hiddenSet]);
+  const hiddenFieldIds = useMemo(() => Array.from(hiddenSet), [hiddenSet]);
 
-  const showAllFields = () => {
-    setHiddenFields(new Set());
-  };
-
-  const isFieldHidden = (fieldId: string) => {
-    return hiddenFields.has(fieldId);
-  };
-
-  const value: HiddenFieldsContextType = {
-    hiddenFields,
-    setHiddenFields,
-    hideField,
-    showField,
-    hideAllFields,
-    showAllFields,
-    isFieldHidden,
-  };
-
-  return (
-    <HiddenFieldsContext.Provider value={value}>
-      {children}
-    </HiddenFieldsContext.Provider>
+  const value = useMemo(
+    () => ({ isFieldHidden, toggleFieldHidden, setHiddenFields, hiddenFieldIds }),
+    [isFieldHidden, toggleFieldHidden, setHiddenFields, hiddenFieldIds]
   );
+
+  return <HiddenFieldsContext.Provider value={value}>{children}</HiddenFieldsContext.Provider>;
 }

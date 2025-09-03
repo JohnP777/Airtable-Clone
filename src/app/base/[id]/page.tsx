@@ -10,6 +10,7 @@ import { FilterProvider } from "../_components/FilterContext";
 import { SearchProvider } from "../_components/SearchContext";
 import { HiddenFieldsProvider } from "../_components/HiddenFieldsContext";
 import { ViewProvider } from "../_components/ViewContext";
+import { LoadedRowsProvider } from "../_components/LoadedRowsContext";
 import { FilterSortButtons } from "../_components/FilterSortButtons";
 
 export default async function BasePage({ params, }: { params: Promise<{ id: string }>; }) {
@@ -24,48 +25,50 @@ export default async function BasePage({ params, }: { params: Promise<{ id: stri
           <FilterProvider>
             <SearchProvider>
               <HiddenFieldsProvider>
+                <LoadedRowsProvider>
                 <div className="min-h-screen bg-[#f9fafb] relative overflow-hidden">
-              {/* Fixed Base Header */}
-              <div className="fixed top-0 left-0 right-0 z-50 bg-[#f9fafb]">
-                <BaseHeader />
-              </div>
-              
-              {/* Fixed Secondary banner with table buttons */}
-              <div className="fixed top-12 left-0 right-0 z-40 bg-[#f9fafb]">
-                <div className="h-8 bg-[#e6fce8] border-b border-gray-200 flex items-center">
-                  <div className="ml-14 px-4">
-                    <TableButtonsWrapper baseId={id} />
+                  {/* Fixed Base Header */}
+                  <div className="fixed top-0 left-0 right-0 z-50 bg-[#f9fafb]">
+                    <BaseHeader />
                   </div>
-                </div>
-              </div>
-              
-              {/* Fixed Third header bar with Filter/Sort buttons */}
-              <div className="fixed top-20 left-0 right-0 z-30 bg-[#f9fafb]">
-                <div className="h-8 bg-gray-100 border-b border-gray-200 flex items-center justify-end">
-                  <div className="flex items-center space-x-2 pr-4">
-                    <FilterSortButtons />
+                  
+                  {/* Fixed Secondary banner with table buttons */}
+                  <div className="fixed top-12 left-0 right-0 z-40 bg-[#f9fafb]">
+                    <div className="h-8 bg-[#e6fce8] border-b border-gray-200 flex items-center">
+                      <div className="ml-14 px-4">
+                        <TableButtonsWrapper baseId={id} />
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
-              
-              {/* Main content area with fixed sidebars */}
-              <div className="flex" style={{ marginTop: '112px' }}>
-                {/* Fixed Left Sidebar - now overlapping everything */}
-                <div className="fixed top-0 left-0 bottom-0 z-[999] bg-[#f9fafb] w-14">
-                  <BaseSidebar />
-                </div>
-                
-                {/* Content area with fixed right sidebar */}
-                <div className="flex flex-1 overflow-hidden">
-                  <BaseContent baseId={id} />
-                </div>
-              </div>
-            </div>
-            </HiddenFieldsProvider>
-        </SearchProvider>
-        </FilterProvider>
-      </SortProvider>
-        </ViewProvider>
+                  
+                  {/* Fixed Third header bar with Filter/Sort buttons */}
+                  <div className="fixed top-20 left-0 right-0 z-30 bg-[#f9fafb]">
+                    <div className="h-8 bg-gray-100 border-b border-gray-200 flex items-center justify-end">
+                      <div className="flex items-center space-x-2 pr-4">
+                        <FilterSortButtons />
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Main content area with fixed sidebars */}
+                  <div className="flex" style={{ marginTop: '112px' }}>
+                    {/* Fixed Left Sidebar - now overlapping everything */}
+                    <div className="fixed top-0 left-0 bottom-0 z-[999] bg-[#f9fafb] w-14">
+                      <BaseSidebar />
+                    </div>
+                    
+                    {/* Content area with fixed right sidebar */}
+                    <div className="flex flex-1 overflow-hidden">
+                      <BaseContent baseId={id} />
+                    </div>
+                  </div>
+                                  </div>
+                </LoadedRowsProvider>
+              </HiddenFieldsProvider>
+            </SearchProvider>
+          </FilterProvider>
+        </SortProvider>
+      </ViewProvider>
     </TableProvider>
   );
 } 

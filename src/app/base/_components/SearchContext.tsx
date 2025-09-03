@@ -1,8 +1,7 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState } from "react";
 import type { ReactNode } from "react";
-import { useView } from "./ViewContext";
 
 interface SearchResult {
   type: "field" | "cell";
@@ -10,6 +9,7 @@ interface SearchResult {
   columnId: string;
   value: string;
   columnName: string;
+  isInView: boolean;
 }
 
 interface SearchContextType {
@@ -29,33 +29,10 @@ interface SearchContextType {
 const SearchContext = createContext<SearchContextType | undefined>(undefined);
 
 export function SearchProvider({ children }: { children: ReactNode }) {
-  const { currentView, updateView } = useView();
   const [searchTerm, setSearchTerm] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [currentResultIndex, setCurrentResultIndex] = useState(0);
   const [isSearchActive, setIsSearchActive] = useState(false);
-
-  // Sync with current view's search settings
-  useEffect(() => {
-    if (currentView) {
-      setSearchTerm(currentView.searchTerm);
-      setSearchResults(currentView.searchResults);
-      setCurrentResultIndex(currentView.currentResultIndex);
-      setIsSearchActive(currentView.isSearchActive);
-    }
-  }, [currentView?.id]);
-
-  // Update view when search settings change
-  useEffect(() => {
-    if (currentView) {
-      updateView(currentView.id, { 
-        searchTerm, 
-        searchResults, 
-        currentResultIndex, 
-        isSearchActive 
-      });
-    }
-  }, [searchTerm, searchResults, currentResultIndex, isSearchActive, currentView?.id]);
 
   const clearSearch = () => {
     setSearchTerm("");
@@ -72,7 +49,9 @@ export function SearchProvider({ children }: { children: ReactNode }) {
 
   const previousResult = () => {
     if (searchResults.length > 0) {
-      setCurrentResultIndex((prev) => (prev - 1 + searchResults.length) % searchResults.length);
+      setCurrentResultIndex(
+        (prev) => (prev - 1 + searchResults.length) % searchResults.length,
+      );
     }
   };
 

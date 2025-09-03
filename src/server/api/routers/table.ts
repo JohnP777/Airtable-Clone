@@ -1,14 +1,16 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc";
+import { Prisma } from "@prisma/client";
 import { faker } from '@faker-js/faker';
 
 // Configuration for bulk operations
 const BULK_OPERATION_CONFIG = {
   // Adjust batch size based on database performance
-  // PostgreSQL can handle larger batches efficiently
-  BATCH_SIZE: 2500,
+  // Reduced from 2500 to prevent transaction timeouts
+  BATCH_SIZE: 1000,
   // Maximum concurrent batches to avoid overwhelming the database
-  MAX_CONCURRENT_BATCHES: 4,
+  // Reduced from 4 to 2 for more stable performance with larger datasets
+  MAX_CONCURRENT_BATCHES: 2,
   // Progress update interval in milliseconds
   PROGRESS_UPDATE_INTERVAL: 100,
   // Enable database-specific optimizations
@@ -23,18 +25,14 @@ function generateFakeBusinessData() {
     columns: [
       { name: "Employee Name", order: 0 },
       { name: "Department", order: 1 },
-      { name: "Email", order: 2 },
-      { name: "Salary", order: 3 },
-      { name: "Start Date", order: 4 }
+      { name: "Email", order: 2 }
     ],
     rows: Array.from({ length: 100 }, (_, index) => ({
       order: index,
       cells: [
         { value: faker.person.fullName() },
         { value: faker.helpers.arrayElement(['Engineering', 'Marketing', 'Sales', 'HR', 'Finance', 'Operations', 'Design', 'Product']) },
-        { value: faker.internet.email() },
-        { value: `$${faker.number.int({ min: 45000, max: 180000 }).toLocaleString()}` },
-        { value: faker.date.past({ years: 3 }).toLocaleDateString() }
+        { value: faker.internet.email() }
       ]
     }))
   };
@@ -124,6 +122,71 @@ export const tableRouter = createTRPCRouter({
       });
     }),
 
+  createView: protectedProcedure
+    .input(z.object({ tableId: z.string(), name: z.string().optional() }))
+    .mutation(async ({ ctx, input }) => {
+      // verify access
+      const table = await ctx.db.table.findFirst({
+        where: { id: input.tableId, base: { createdById: ctx.session.user.id } },
+        select: { id: true }
+      });
+      if (!table) throw new Error("Table not found");
+
+      const count = await ctx.db.view.count({ where: { tableId: input.tableId } });
+      const view = await ctx.db.view.create({
+        data: {
+          tableId: input.tableId,
+          name: input.name ?? `Grid view ${count + 1}`,
+          type: "grid",
+          order: count,
+        },
+        select: { id: true, name: true, type: true, order: true }
+      });
+      return view;
+    }),
+
+  getView: protectedProcedure
+    .input(z.object({ viewId: z.string(), tableId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const view = await ctx.db.view.findFirst({
+        where: {
+          id: input.viewId,
+          tableId: input.tableId,
+          table: { base: { createdById: ctx.session.user.id } },
+        },
+        include: {
+          sortRules: { orderBy: { order: "asc" } },
+          filterRules: { orderBy: { order: "asc" } },
+        },
+      });
+      if (!view) throw new Error("View not found");
+      return view;
+    }),
+
+  updateHiddenFields: protectedProcedure
+    .input(z.object({
+      viewId: z.string(),
+      tableId: z.string(),
+      hiddenFieldIds: z.array(z.string()),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const view = await ctx.db.view.findFirst({
+        where: {
+          id: input.viewId,
+          tableId: input.tableId,
+          table: { base: { createdById: ctx.session.user.id } },
+        },
+        select: { id: true },
+      });
+      if (!view) throw new Error("View not found");
+
+      await ctx.db.view.update({
+        where: { id: view.id },
+        data: { hiddenFields: input.hiddenFieldIds },
+      });
+      return { success: true };
+    }),
+
   getTableData: protectedProcedure
     .input(z.object({
       tableId: z.string(),
@@ -138,6 +201,15 @@ export const tableRouter = createTRPCRouter({
       })).optional()
     }))
     .query(async ({ ctx, input }) => {
+      // BLOCKED: This endpoint is disabled for large tables to prevent OOM crashes
+      // Use getTableDataPaginated instead for tables with more than 2000 rows
+      const rowCount = await ctx.db.tableRow.count({ where: { tableId: input.tableId } });
+      if (rowCount > 2000) {
+        throw new Error(
+          `getTableData disabled for large tables (${rowCount.toLocaleString()} rows). Use getTableDataPaginated instead.`
+        );
+      }
+
       const table = await ctx.db.table.findFirst({
         where: {
           id: input.tableId,
@@ -244,31 +316,56 @@ export const tableRouter = createTRPCRouter({
   applySort: protectedProcedure
     .input(z.object({
       tableId: z.string(),
+      viewId: z.string(),
       sortRules: z.array(z.object({
         columnId: z.string(),
         direction: z.enum(["asc", "desc"])
       }))
     }))
     .mutation(async ({ ctx, input }) => {
-      // Verify user owns the table
-      const table = await ctx.db.table.findFirst({
-        where: { 
-          id: input.tableId,
-          base: { createdById: ctx.session.user.id }
+      let view = await ctx.db.view.findFirst({
+        where: {
+          id: input.viewId,
+          tableId: input.tableId,
+          table: { base: { createdById: ctx.session.user.id } }
+        },
+        select: { id: true }
+      });
+      if (!view) {
+        view = await ctx.db.view.findFirst({
+          where: {
+            tableId: input.tableId,
+            table: { base: { createdById: ctx.session.user.id } }
+          },
+          select: { id: true }
+        });
+        if (!view) {
+          const created = await ctx.db.view.create({
+            data: { tableId: input.tableId, name: "Grid view", type: "grid", order: 0 },
+            select: { id: true }
+          });
+          view = created;
+        }
+      }
+
+      await ctx.db.$transaction(async (tx) => {
+        await tx.viewSortRule.deleteMany({ where: { viewId: view!.id } });
+        if (input.sortRules.length) {
+          await tx.viewSortRule.createMany({
+            data: input.sortRules.map((r, i) => ({
+              viewId: view!.id,
+              columnId: r.columnId,
+              direction: r.direction,
+              order: i
+            }))
+          });
         }
       });
 
-      if (!table) {
-        throw new Error("Table not found");
-      }
-
-      // For now, we'll just return success since the sorting is applied in the query
-      // In a real implementation, you might want to store the sort rules in the database
-      // associated with the current view
-      return { 
-        success: true, 
+      return {
+        success: true,
         sortRules: input.sortRules,
-        message: "Sort rules applied successfully"
+        message: "Sort rules saved to view"
       };
     }),
 
@@ -532,6 +629,66 @@ export const tableRouter = createTRPCRouter({
       return column;
     }),
 
+  // Reorder two rows within a view by swapping their positions
+  reorderRows: protectedProcedure
+    .input(z.object({
+      viewId: z.string(),
+      tableId: z.string(),
+      aRowId: z.string(),
+      bRowId: z.string(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      // Verify access
+      const view = await ctx.db.view.findFirst({
+        where: {
+          id: input.viewId,
+          tableId: input.tableId,
+          table: { base: { createdById: ctx.session.user.id } }
+        },
+        select: { id: true }
+      });
+      if (!view) throw new Error("View not found");
+
+      await ctx.db.$transaction(async (tx) => {
+        const existing = await tx.viewRowOrder.findMany({
+          where: { viewId: input.viewId, rowId: { in: [input.aRowId, input.bRowId] } }
+        });
+        const a = existing.find(e => e.rowId === input.aRowId);
+        const b = existing.find(e => e.rowId === input.bRowId);
+
+        const ensure = async (rowId: string, current: number | undefined | null) => {
+          if (typeof current === 'number') return current;
+          const max = await tx.viewRowOrder.aggregate({
+            _max: { position: true },
+            where: { viewId: input.viewId }
+          });
+          const next = (max._max.position ?? -1) + 1;
+          await tx.viewRowOrder.upsert({
+            where: { viewId_rowId: { viewId: input.viewId, rowId } },
+            create: { viewId: input.viewId, rowId, position: next },
+            update: { position: next }
+          });
+          return next;
+        };
+
+        const aPos = await ensure(input.aRowId, a?.position);
+        const bPos = await ensure(input.bRowId, b?.position);
+
+        await Promise.all([
+          tx.viewRowOrder.update({
+            where: { viewId_rowId: { viewId: input.viewId, rowId: input.aRowId } },
+            data: { position: bPos }
+          }),
+          tx.viewRowOrder.update({
+            where: { viewId_rowId: { viewId: input.viewId, rowId: input.bRowId } },
+            data: { position: aPos }
+          })
+        ]);
+      });
+
+      return { success: true };
+    }),
+
   populateCellsWithData: protectedProcedure
     .input(z.object({ 
       tableId: z.string(),
@@ -674,10 +831,12 @@ export const tableRouter = createTRPCRouter({
     }),
 
   // Ultra-fast bulk row addition using optimized batching
+  // Optimized for large datasets (100k+ rows) with stable transaction handling
+  // Memory-safe: generates fake data per batch and chunks cell creation
   addBulkRowsFast: protectedProcedure
     .input(z.object({ 
       tableId: z.string(),
-      rowCount: z.number().min(1).max(10000)
+      rowCount: z.number().min(1).max(1000000)
     }))
     .mutation(async ({ ctx, input }) => {
       // Verify user owns the table
@@ -704,8 +863,8 @@ export const tableRouter = createTRPCRouter({
       
       const startOrder = (maxOrderRow?.order ?? -1) + 1;
 
-      // Generate fake data for existing columns
-      const fakeData = generateFakeDataForColumns(table.columns, input.rowCount);
+      // Don't pre-generate all fake data - generate per batch to prevent memory issues
+      // const fakeData = generateFakeDataForColumns(table.columns, input.rowCount);
 
       // Use much larger batches and concurrent processing for maximum performance
       const batchSize = BULK_OPERATION_CONFIG.BATCH_SIZE;
@@ -713,12 +872,15 @@ export const tableRouter = createTRPCRouter({
       let totalCreatedRows = 0;
 
       // Process batches with controlled concurrency to avoid overwhelming the database
+      // Note: Reduced batch size and concurrency to prevent transaction timeouts
       const processBatch = async (batchIndex: number) => {
         const startIndex = batchIndex * batchSize;
         const endIndex = Math.min(startIndex + batchSize, input.rowCount);
-        const batch = fakeData.slice(startIndex, endIndex);
+        // Generate fake data for this batch only to prevent memory issues
+        const batch = generateFakeDataForColumns(table.columns, endIndex - startIndex);
         
         // Use a transaction for each batch to ensure atomicity
+        // Smaller batch sizes prevent transaction timeouts (was hitting 5s limit)
         return await ctx.db.$transaction(async (tx) => {
           // Create rows for this batch with sequential ordering
           const rowData = batch.map((row, index) => ({
@@ -765,10 +927,15 @@ export const tableRouter = createTRPCRouter({
 
           // Create all cells for this batch at once
           if (batchCellData.length > 0) {
-            await tx.tableCell.createMany({
-              data: batchCellData,
-              skipDuplicates: true
-            });
+            // Chunk cell creation to prevent memory issues with large batches
+            const CELL_CHUNK_SIZE = 5000;
+            for (let k = 0; k < batchCellData.length; k += CELL_CHUNK_SIZE) {
+              const cellChunk = batchCellData.slice(k, k + CELL_CHUNK_SIZE);
+              await tx.tableCell.createMany({
+                data: cellChunk,
+                skipDuplicates: true
+              });
+            }
           }
 
           return batch.length;
@@ -777,6 +944,8 @@ export const tableRouter = createTRPCRouter({
 
       // Process batches with controlled concurrency
       const batchPromises = [];
+      console.log(`Processing ${totalBatches} batches of ${batchSize} rows each for ${input.rowCount} total rows`);
+      
       for (let i = 0; i < totalBatches; i += BULK_OPERATION_CONFIG.MAX_CONCURRENT_BATCHES) {
         const concurrentBatch = [];
         for (let j = 0; j < BULK_OPERATION_CONFIG.MAX_CONCURRENT_BATCHES && i + j < totalBatches; j++) {
@@ -786,6 +955,11 @@ export const tableRouter = createTRPCRouter({
         // Wait for current concurrent batch to complete before starting next
         const batchResults = await Promise.all(concurrentBatch);
         totalCreatedRows += batchResults.reduce((sum, count) => sum + count, 0);
+        
+        // Log progress for large operations
+        if (input.rowCount > 10000) {
+          console.log(`Completed ${totalCreatedRows}/${input.rowCount} rows (${Math.round((totalCreatedRows / input.rowCount) * 100)}%)`);
+        }
       }
 
       return { 
@@ -798,8 +972,195 @@ export const tableRouter = createTRPCRouter({
   getTableDataPaginated: protectedProcedure
     .input(z.object({
       tableId: z.string(),
+      viewId: z.string().optional(),
       page: z.number().min(0).default(0),
       pageSize: z.number().min(1).max(100).default(50),
+      sortRules: z.array(z.object({
+        columnId: z.string(),
+        direction: z.enum(["asc", "desc"])
+      })).optional(),
+      filterRules: z.array(z.object({
+        columnId: z.string(),
+        operator: z.enum([
+          "contains", "does not contain",
+          "is", "is not",
+          "is empty", "is not empty"
+        ]),
+        value: z.string().default("")
+      })).optional()
+    }))
+    .query(async ({ ctx, input }) => {
+      const table = await ctx.db.table.findFirst({
+        where: {
+          id: input.tableId,
+          base: { createdById: ctx.session.user.id }
+        },
+        include: { columns: { orderBy: { order: "asc" } } }
+      });
+      if (!table) throw new Error("Table not found");
+
+      let effectiveSort = input.sortRules ?? [];
+      let effectiveFilter = input.filterRules ?? [];
+
+      if (input.viewId && (!effectiveSort.length || !effectiveFilter.length)) {
+        let view = await ctx.db.view.findFirst({
+          where: {
+            id: input.viewId,
+            tableId: input.tableId,
+            table: { base: { createdById: ctx.session.user.id } }
+          },
+          include: {
+            sortRules: { orderBy: { order: "asc" } },
+            filterRules: { orderBy: { order: "asc" } }
+          }
+        });
+        if (!view) {
+          view = await ctx.db.view.findFirst({
+            where: {
+              tableId: input.tableId,
+              table: { base: { createdById: ctx.session.user.id } }
+            },
+            include: {
+              sortRules: { orderBy: { order: "asc" } },
+              filterRules: { orderBy: { order: "asc" } }
+            }
+          });
+        }
+        if (view) {
+          if (!effectiveSort.length && view.sortRules?.length) {
+            effectiveSort = view.sortRules.map(r => ({ columnId: r.columnId, direction: r.direction as "asc" | "desc" }));
+          }
+          if (!effectiveFilter.length && view.filterRules?.length) {
+            effectiveFilter = view.filterRules.map(r => ({ columnId: r.columnId, operator: r.operator as any, value: r.value ?? "" }));
+          }
+        }
+      }
+
+      const joins: Prisma.Sql[] = [];
+      const whereParts: Prisma.Sql[] = [Prisma.sql`tr."tableId" = ${input.tableId}`];
+
+      effectiveFilter.forEach((f, idx) => {
+        const alias = Prisma.raw(`f${idx}`);
+        joins.push(Prisma.sql`
+          LEFT JOIN "TableCell" ${alias}
+            ON ${alias}."rowId" = tr.id AND ${alias}."columnId" = ${f.columnId}
+        `);
+        const v = (f.value ?? "").toLowerCase();
+        const like = `%${v}%`;
+        switch (f.operator) {
+          case "contains":
+            whereParts.push(Prisma.sql`LOWER(COALESCE(${alias}.value, '')) LIKE ${like}`);
+            break;
+          case "does not contain":
+            whereParts.push(Prisma.sql`(LOWER(COALESCE(${alias}.value, '')) NOT LIKE ${like})`);
+            break;
+          case "is":
+            whereParts.push(Prisma.sql`LOWER(COALESCE(${alias}.value, '')) = ${v}`);
+            break;
+          case "is not":
+            whereParts.push(Prisma.sql`LOWER(COALESCE(${alias}.value, '')) <> ${v}`);
+            break;
+          case "is empty":
+            whereParts.push(Prisma.sql`${alias}.value IS NULL OR ${alias}.value = ''`);
+            break;
+          case "is not empty":
+            whereParts.push(Prisma.sql`${alias}.value IS NOT NULL AND ${alias}.value <> ''`);
+            break;
+        }
+      });
+
+      const orderParts: Prisma.Sql[] = [];
+      // If no explicit sort, and a view is provided, respect per-view manual order first
+      if (!effectiveSort.length && input.viewId) {
+        joins.push(Prisma.sql`
+          LEFT JOIN "ViewRowOrder" vro
+            ON vro."rowId" = tr.id AND vro."viewId" = ${input.viewId}
+        `);
+        orderParts.push(Prisma.sql`(vro."position" IS NULL) ASC`);
+        orderParts.push(Prisma.sql`vro."position" ASC NULLS LAST`);
+      }
+      effectiveSort.forEach((s, idx) => {
+        const alias = Prisma.raw(`s${idx}`);
+        joins.push(Prisma.sql`
+          LEFT JOIN "TableCell" ${alias}
+            ON ${alias}."rowId" = tr.id AND ${alias}."columnId" = ${s.columnId}
+        `);
+        const dir = Prisma.raw(s.direction.toUpperCase());
+        const numExpr = Prisma.sql`NULLIF(regexp_replace(COALESCE(${alias}.value, ''), '[^0-9\\.\\-]', '', 'g'), '')`;
+        const isNum = Prisma.sql`(COALESCE(${numExpr}, '') ~ '^-?\\d+(\\.\\d+)?$')`;
+        const safeNum = Prisma.sql`CASE WHEN ${isNum} THEN (${numExpr})::numeric ELSE NULL END`;
+        orderParts.push(Prisma.sql`${isNum} DESC`);
+        orderParts.push(Prisma.sql`${safeNum} ${dir} NULLS LAST`);
+        orderParts.push(Prisma.sql`LOWER(COALESCE(${alias}.value, '')) ${dir}`);
+      });
+      orderParts.push(Prisma.sql`tr.order ASC`);
+      // Ensure globally stable ordering across pages (unique final tiebreaker)
+      orderParts.push(Prisma.sql`tr.id ASC`);
+
+      const joinsSql = joins.length > 0 ? Prisma.join(joins, ' ') : Prisma.sql``;
+      const whereSql = whereParts.length > 0 ? Prisma.join(whereParts, ' AND ') : Prisma.sql`TRUE`;
+      const countRows = await ctx.db.$queryRaw<Array<{ count: bigint }>>(Prisma.sql`
+        SELECT COUNT(*)::bigint AS count
+        FROM "TableRow" tr
+        ${joinsSql}
+        WHERE ${whereSql}
+      `);
+      const totalRows = Number(countRows[0]?.count ?? 0);
+
+      const offset = input.page * input.pageSize;
+      const limit = input.pageSize;
+      const idWindow = await ctx.db.$queryRaw<Array<{ id: string; order: number }>>(Prisma.sql`
+        SELECT tr.id, tr.order
+        FROM "TableRow" tr
+        ${joinsSql}
+        WHERE ${whereSql}
+        ORDER BY ${Prisma.join(orderParts, ', ')}
+        OFFSET ${Prisma.raw(String(offset))} LIMIT ${Prisma.raw(String(limit))}
+      `);
+
+      if (idWindow.length === 0) {
+        return {
+          table,
+          rows: [],
+          pagination: {
+            page: input.page,
+            pageSize: input.pageSize,
+            totalRows,
+            totalPages: Math.ceil(totalRows / input.pageSize),
+            hasNextPage: false,
+            hasPreviousPage: input.page > 0
+          }
+        };
+      }
+
+      const rows = await ctx.db.tableRow.findMany({
+        where: { id: { in: idWindow.map(r => r.id) } },
+        include: { cells: { include: { column: true } } }
+      });
+      const orderMap = new Map(idWindow.map((r, i) => [r.id, i]));
+      rows.sort((a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0));
+
+      return {
+        table,
+        rows,
+        pagination: {
+          page: input.page,
+          pageSize: input.pageSize,
+          totalRows,
+          totalPages: Math.ceil(totalRows / input.pageSize),
+          hasNextPage: (input.page + 1) * input.pageSize < totalRows,
+          hasPreviousPage: input.page > 0
+        }
+      };
+    }),
+
+  // New search endpoint that searches across all rows
+  searchPaginated: protectedProcedure
+    .input(z.object({
+      tableId: z.string(),
+      query: z.string().min(1), // Changed from searchTerm to query
+      offset: z.number().min(0).default(0),
+      limit: z.number().min(1).max(200).default(100), // Cap at 200 for performance
       sortRules: z.array(z.object({
         columnId: z.string(),
         direction: z.enum(["asc", "desc"])
@@ -811,6 +1172,9 @@ export const tableRouter = createTRPCRouter({
       })).optional()
     }))
     .query(async ({ ctx, input }) => {
+      // Set a timeout to prevent long-running searches
+      await ctx.db.$executeRaw`SET LOCAL statement_timeout = '3000ms'`;
+
       const table = await ctx.db.table.findFirst({
         where: {
           id: input.tableId,
@@ -829,17 +1193,53 @@ export const tableRouter = createTRPCRouter({
         throw new Error("Table not found");
       }
 
-      // Get total count for pagination
-      const totalRows = await ctx.db.tableRow.count({
-        where: { tableId: input.tableId }
-      });
+      const searchLower = input.query.toLowerCase();
 
-      // Get paginated rows with cells
+      // First, find all row IDs that contain matches (for total count and navigation)
+      // Use a more efficient approach for large tables
+      const matchingRowIds = await ctx.db.$queryRaw<Array<{ rowId: string; order: number }>>`
+        SELECT DISTINCT tr.id as "rowId", tr.order
+        FROM "TableRow" tr
+        JOIN "TableCell" tc ON tr.id = tc."rowId"
+        JOIN "TableColumn" tcol ON tc."columnId" = tcol.id
+        WHERE tr."tableId" = ${input.tableId}
+        AND (
+          LOWER(tc.value) LIKE ${`%${searchLower}%`}
+          OR LOWER(tcol.name) LIKE ${`%${searchLower}%`}
+        )
+        ORDER BY tr.order ASC
+        LIMIT 1000
+      `;
+
+      const totalMatches = matchingRowIds.length;
+
+      // Get the specific window of matching rows using offset/limit
+      const windowStart = input.offset;
+      const windowEnd = input.offset + input.limit;
+      const windowRowIds = matchingRowIds.slice(windowStart, windowEnd);
+
+      if (windowRowIds.length === 0) {
+        return {
+          table,
+          rows: [],
+          totalMatches,
+          matchRowIds: matchingRowIds.map(r => ({ id: r.rowId, order: r.order })),
+          pagination: {
+            offset: input.offset,
+            limit: input.limit,
+            totalMatches,
+            hasMore: windowEnd < totalMatches,
+            nextOffset: windowEnd < totalMatches ? windowEnd : undefined
+          }
+        };
+      }
+
+      // Fetch the actual row data for the current window
       const rows = await ctx.db.tableRow.findMany({
-        where: { tableId: input.tableId },
+        where: {
+          id: { in: windowRowIds.map(r => r.rowId) }
+        },
         orderBy: { order: "asc" },
-        skip: input.page * input.pageSize,
-        take: input.pageSize,
         include: {
           cells: {
             include: {
@@ -849,16 +1249,21 @@ export const tableRouter = createTRPCRouter({
         }
       });
 
+      // Sort rows by the order they appeared in the search results
+      const rowOrderMap = new Map(windowRowIds.map((r, index) => [r.rowId, index]));
+      rows.sort((a, b) => (rowOrderMap.get(a.id) ?? 0) - (rowOrderMap.get(b.id) ?? 0));
+
       return {
         table,
         rows,
+        totalMatches,
+        matchRowIds: matchingRowIds.map(r => ({ id: r.rowId, order: r.order })),
         pagination: {
-          page: input.page,
-          pageSize: input.pageSize,
-          totalRows,
-          totalPages: Math.ceil(totalRows / input.pageSize),
-          hasNextPage: (input.page + 1) * input.pageSize < totalRows,
-          hasPreviousPage: input.page > 0
+          offset: input.offset,
+          limit: input.limit,
+          totalMatches,
+          hasMore: windowEnd < totalMatches,
+          nextOffset: windowEnd < totalMatches ? windowEnd : undefined
         }
       };
     })

@@ -16,7 +16,6 @@ export function AddRowButton({ className = "", children }: AddRowButtonProps) {
   const addRowMutation = api.table.addRow.useMutation({
     onSuccess: () => {
       // Invalidate and refetch table data to show the new row
-      void utils.table.getTableData.invalidate({ tableId: selectedTableId! });
       void utils.table.getTableDataPaginated.invalidate();
     },
   });
