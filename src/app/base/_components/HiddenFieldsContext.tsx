@@ -1,13 +1,15 @@
 "use client";
 
-import React, { createContext, useContext, useMemo, useState, useCallback } from "react";
+import React, { createContext, useContext, useMemo, useState, useEffect } from "react";
 import { useView } from "./ViewContext";
+import { api } from "../../../trpc/react";
 
 type Ctx = {
   isFieldHidden: (id: string) => boolean;
   toggleFieldHidden: (id: string) => void;
   setHiddenFields: (ids: string[]) => void;
   hiddenFieldIds: string[];
+  hydrated: boolean;
 };
 
 const HiddenFieldsContext = createContext<Ctx | null>(null);
@@ -24,33 +26,57 @@ interface HiddenFieldsProviderProps {
 
 export function HiddenFieldsProvider({ children }: HiddenFieldsProviderProps) {
   const { currentViewId } = useView();
+  const utils = api.useUtils();
+  const viewId = currentViewId;
+  const hasView = !!viewId;
   const [byView, setByView] = useState<Record<string, Set<string>>>({});
+  const [hydratedViews, setHydratedViews] = useState<Record<string, boolean>>({});
 
-  const setHiddenFields = useCallback((ids: string[]) => {
-    if (!currentViewId) return;
-    setByView(prev => ({ ...prev, [currentViewId!]: new Set(ids) }));
-  }, [currentViewId]);
+  const { data } = api.table.getViewState.useQuery(
+    { viewId: viewId! }, 
+    { 
+      enabled: hasView,
+      retry: false,
+    }
+  );
+  const saveMutation = api.table.setHiddenFields.useMutation({
+    onSuccess: () => void utils.table.getTableDataPaginated.invalidate(),
+  });
 
-  const toggleFieldHidden = useCallback((id: string) => {
-    if (!currentViewId) return;
-    setByView(prev => {
-      const set = new Set(prev[currentViewId!] ?? []);
-      set.has(id) ? set.delete(id) : set.add(id);
-      return { ...prev, [currentViewId!]: set };
-    });
-  }, [currentViewId]);
+  // hydrate
+  useEffect(() => {
+    if (!viewId) return;
+    if (data) setByView(prev => ({ ...prev, [viewId]: new Set(data.hiddenFields ?? []) }));
+    setHydratedViews(prev => ({ ...prev, [viewId]: true })); // <-- ensure true even with empty data
+  }, [viewId, data]);
 
-  const hiddenSet = useMemo(() => {
-    if (!currentViewId) return new Set<string>();
-    return byView[currentViewId] ?? new Set<string>();
-  }, [byView, currentViewId]);
-  
-  const isFieldHidden = useCallback((id: string) => hiddenSet.has(id), [hiddenSet]);
-  const hiddenFieldIds = useMemo(() => Array.from(hiddenSet), [hiddenSet]);
+  const hiddenSet = byView[viewId ?? ''] ?? new Set<string>();
+  const hiddenFieldIds = Array.from(hiddenSet);
+  const hydrated = !!hydratedViews[viewId ?? ''];
+
+  const persist = (set: Set<string>) => {
+    if (!hasView) return;
+    saveMutation.mutate({ viewId: viewId!, hiddenFieldIds: Array.from(set) });
+  };
+
+  const setHiddenFields = (ids: string[]) => {
+    const set = new Set(ids);
+    setByView(prev => ({ ...prev, [viewId!]: set }));
+    persist(set);
+  };
+
+  const toggleFieldHidden = (id: string) => {
+    const set = new Set(hiddenSet);
+    set.has(id) ? set.delete(id) : set.add(id);
+    setByView(prev => ({ ...prev, [viewId!]: set }));
+    persist(set);
+  };
+
+  const isFieldHidden = (id: string) => hiddenSet.has(id);
 
   const value = useMemo(
-    () => ({ isFieldHidden, toggleFieldHidden, setHiddenFields, hiddenFieldIds }),
-    [isFieldHidden, toggleFieldHidden, setHiddenFields, hiddenFieldIds]
+    () => ({ isFieldHidden, toggleFieldHidden, setHiddenFields, hiddenFieldIds, hydrated }),
+    [hiddenFieldIds, hiddenSet, hydrated]
   );
 
   return <HiddenFieldsContext.Provider value={value}>{children}</HiddenFieldsContext.Provider>;

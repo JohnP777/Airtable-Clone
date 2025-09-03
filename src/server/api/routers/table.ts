@@ -2,6 +2,7 @@ import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc";
 import { Prisma } from "@prisma/client";
 import { faker } from '@faker-js/faker';
+import { TRPCError } from "@trpc/server";
 
 // Configuration for bulk operations
 const BULK_OPERATION_CONFIG = {
@@ -185,6 +186,77 @@ export const tableRouter = createTRPCRouter({
         data: { hiddenFields: input.hiddenFieldIds },
       });
       return { success: true };
+    }),
+
+  // Get persisted state for a view (for hydrating contexts)
+  getViewState: protectedProcedure
+    .input(z.object({ viewId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      // Validate viewId is not empty
+      if (!input.viewId || input.viewId.trim() === "") {
+        throw new TRPCError({ 
+          code: "BAD_REQUEST", 
+          message: "viewId cannot be empty" 
+        });
+      }
+
+      const view = await ctx.db.view.findUnique({
+        where: { id: input.viewId },
+        include: {
+          sortRules: { orderBy: { order: "asc" } },
+          filterRules: { orderBy: { order: "asc" } },
+        },
+      });
+      if (!view) throw new TRPCError({ code: "NOT_FOUND" });
+
+      return {
+        hiddenFields: view.hiddenFields ?? [],
+        sortRules: view.sortRules.map(r => ({ columnId: r.columnId, direction: r.direction as "asc"|"desc" })),
+        filterRules: view.filterRules.map(r => ({
+          columnId: r.columnId,
+          operator: r.operator as
+            | "contains" | "does not contain" | "is" | "is not" | "is empty" | "is not empty",
+          value: r.value,
+        })),
+      };
+    }),
+
+  // Set filter rules for a view
+  setFilterRules: protectedProcedure
+    .input(z.object({
+      viewId: z.string(),
+      rules: z.array(z.object({
+        columnId: z.string(),
+        operator: z.enum(["contains","does not contain","is","is not","is empty","is not empty"]),
+        value: z.string(),
+      })),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await ctx.db.$transaction([
+        ctx.db.viewFilterRule.deleteMany({ where: { viewId: input.viewId } }),
+        ctx.db.viewFilterRule.createMany({
+          data: input.rules.map((r, i) => ({
+            viewId: input.viewId,
+            columnId: r.columnId,
+            operator: r.operator,
+            value: r.value,
+            order: i,
+          })),
+        }),
+        ctx.db.view.update({ where: { id: input.viewId }, data: { updatedAt: new Date() } }),
+      ]);
+      return { ok: true };
+    }),
+
+  // Set hidden fields for a view (replaces the old updateHiddenFields)
+  setHiddenFields: protectedProcedure
+    .input(z.object({ viewId: z.string(), hiddenFieldIds: z.array(z.string()) }))
+    .mutation(async ({ ctx, input }) => {
+      await ctx.db.view.update({
+        where: { id: input.viewId },
+        data: { hiddenFields: input.hiddenFieldIds, updatedAt: new Date() },
+      });
+      return { ok: true };
     }),
 
   getTableData: protectedProcedure

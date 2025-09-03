@@ -34,10 +34,10 @@ const PAGE_SIZE = 100; // Load 100 rows per page (backend limit)
 export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
   const utils = api.useUtils();
   const { sortRules } = useSortContext();
-  const { filterRules } = useFilterContext();
+  const { filterRules, hydrated: filtersHydrated } = useFilterContext();
   const { currentViewId } = useView();
   const { searchResults, currentResultIndex } = useSearchContext();
-  const { isFieldHidden } = useHiddenFields();
+  const { isFieldHidden, hydrated: hiddenHydrated } = useHiddenFields();
   const { setLoadedRows } = useLoadedRows();
   const inputRef = useRef<HTMLInputElement>(null);
   const currentValueRef = useRef<string>("");
@@ -67,6 +67,11 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
   // Local state to track cell values for immediate updates
   const [localCellValues, setLocalCellValues] = useState<Record<string, string>>({});
 
+  // Wait for contexts to be hydrated before enabling queries
+  const hasView = !!currentViewId;
+  const metaEnabled = !!tableId && hasView;                     // <-- runs immediately for schema
+  const rowsEnabled = !!tableId && hasView && filtersHydrated && hiddenHydrated; // rows wait for hydration
+
   // Get total row count for the scrollbar
   const { data: totalCountData } = api.table.getTableDataPaginated.useQuery(
     {
@@ -74,11 +79,14 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
       viewId: currentViewId ?? undefined,
       page: 0,
       pageSize: 1,
+      sortRules: sortRules.length ? sortRules.map(rule => ({ columnId: rule.columnId, direction: rule.direction })) : undefined,
+      filterRules: filterRules.length ? filterRules.map(rule => ({ columnId: rule.columnId, operator: rule.operator as any, value: rule.value })) : undefined,
     },
     { 
-      enabled: !!tableId,
+      enabled: metaEnabled,      // <-- not blocked by hydration
       staleTime: 5000,
       refetchInterval: false,
+      placeholderData: (prev) => prev, // Keep previous for a tick to avoid resize flicker
     }
   );
 
@@ -86,14 +94,6 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
   const [stableTotal, setStableTotal] = useState<number | null>(null);
   const prevTotalRef = useRef(0);
   
-  useEffect(() => {
-    const t = totalCountData?.pagination?.totalRows;
-    if (typeof t === 'number') {
-      if (stableTotal !== t) setStableTotal(t);
-      prevTotalRef.current = t;
-    }
-  }, [totalCountData?.pagination?.totalRows, stableTotal]);
-
   const countForVirtualizer = stableTotal ?? prevTotalRef.current ?? 0;
   const totalRows = countForVirtualizer;
 
@@ -149,14 +149,14 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
   const { data: tableData, isLoading } = api.table.getTableDataPaginated.useQuery(
     {
       tableId,
-      viewId: currentViewId,
+      viewId: currentViewId ?? undefined,
       page: safeStartPage,
       pageSize: PAGE_SIZE,
       sortRules: sortRules.length ? sortRules.map(rule => ({ columnId: rule.columnId, direction: rule.direction })) : undefined,
       filterRules: filterRules.length ? filterRules.map(rule => ({ columnId: rule.columnId, operator: rule.operator as any, value: rule.value })) : undefined,
     },
     { 
-      enabled: !!tableId && totalRows > 0 && safeStartPage >= 0,
+      enabled: rowsEnabled && safeStartPage >= 0,
       staleTime: 600000,
       refetchOnWindowFocus: false,
       placeholderData: (prev) => prev, // Keep previous page data to prevent unmounting
@@ -168,14 +168,14 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
   const { data: endPageData } = api.table.getTableDataPaginated.useQuery(
     {
       tableId,
-      viewId: currentViewId,
+      viewId: currentViewId ?? undefined,
       page: safeEndPage,
       pageSize: PAGE_SIZE,
       sortRules: sortRules.length ? sortRules.map(rule => ({ columnId: rule.columnId, direction: rule.direction })) : undefined,
       filterRules: filterRules.length ? filterRules.map(rule => ({ columnId: rule.columnId, operator: rule.operator as any, value: rule.value })) : undefined,
     },
     { 
-      enabled: !!tableId && totalRows > 0 && needEndPage,
+      enabled: rowsEnabled && needEndPage,
       staleTime: 600000,
       refetchOnWindowFocus: false,
       placeholderData: (prev) => prev, // Keep previous page data to prevent unmounting
@@ -188,14 +188,14 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
   const { data: midPageData } = api.table.getTableDataPaginated.useQuery(
     {
       tableId,
-      viewId: currentViewId,
+      viewId: currentViewId ?? undefined,
       page: midPage,
       pageSize: PAGE_SIZE,
       sortRules: sortRules.length ? sortRules.map(rule => ({ columnId: rule.columnId, direction: rule.direction })) : undefined,
       filterRules: filterRules.length ? filterRules.map(rule => ({ columnId: rule.columnId, operator: rule.operator as any, value: rule.value })) : undefined,
     },
     { 
-      enabled: !!tableId && totalRows > 0 && needMidPage,
+      enabled: rowsEnabled && needMidPage,
       staleTime: 600000,
       refetchOnWindowFocus: false,
       placeholderData: (prev) => prev, // Keep previous page data to prevent unmounting
@@ -206,14 +206,14 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
   const { data: prevPageData } = api.table.getTableDataPaginated.useQuery(
     {
       tableId,
-      viewId: currentViewId,
+      viewId: currentViewId ?? undefined,
       page: Math.max(0, safeStartPage - 1),
       pageSize: PAGE_SIZE,
       sortRules: sortRules.length ? sortRules.map(rule => ({ columnId: rule.columnId, direction: rule.direction })) : undefined,
       filterRules: filterRules.length ? filterRules.map(rule => ({ columnId: rule.columnId, operator: rule.operator as any, value: rule.value })) : undefined,
     },
     { 
-      enabled: !!tableId && totalRows > 0 && safeStartPage > 0,
+      enabled: rowsEnabled && safeStartPage > 0,
       staleTime: 600000,
       refetchOnWindowFocus: false,
       placeholderData: (prev) => prev, // Keep previous page data to prevent unmounting
@@ -224,7 +224,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
   const sortFilterSig = useMemo(
     () => JSON.stringify({
       tableId,
-      viewId: currentViewId,
+      viewId: currentViewId ?? undefined,
       sort: sortRules.map(r => ({ columnId: r.columnId, direction: r.direction })),
       filter: filterRules.map(r => ({ columnId: r.columnId, operator: r.operator, value: r.value })),
     }),
@@ -239,15 +239,57 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
     }
   }, [sortFilterSig, utils.table.getTableDataPaginated]);
 
+  // Update stable total when count changes - prefer page query results over count query
+  useEffect(() => {
+    const t =
+      tableData?.pagination?.totalRows ??
+      prevPageData?.pagination?.totalRows ??
+      midPageData?.pagination?.totalRows ??
+      endPageData?.pagination?.totalRows ??
+      totalCountData?.pagination?.totalRows;
+
+    if (typeof t === 'number') {
+      if (stableTotal !== t) setStableTotal(t);
+      prevTotalRef.current = t;
+    }
+  }, [
+    tableData?.pagination?.totalRows,
+    prevPageData?.pagination?.totalRows,
+    midPageData?.pagination?.totalRows,
+    endPageData?.pagination?.totalRows,
+    totalCountData?.pagination?.totalRows,
+    stableTotal
+  ]);
+
+  // Reset scroll to top when sort/filter changes (with safety guards)
+  const firstRun = useRef(true);
+  useEffect(() => {
+    if (firstRun.current) { 
+      firstRun.current = false; 
+      return; 
+    }
+    const id = setTimeout(() => {
+      virtualizer?.scrollToIndex(0, { align: 'start' });
+    }, 150);
+    return () => clearTimeout(id);
+  }, [sortFilterSig, virtualizer]);
+
   // Keep last known table schema so the table shell never unmounts during page transitions
   type TableMeta = NonNullable<typeof tableData>["table"];
   const tableMetaRef = useRef<TableMeta | null>(null);
   useEffect(() => {
+    if (totalCountData?.table) tableMetaRef.current = totalCountData.table; // <-- NEW: schema probe fills this first
     if (tableData?.table) tableMetaRef.current = tableData.table;
     if (prevPageData?.table) tableMetaRef.current = prevPageData.table;
     if (midPageData?.table) tableMetaRef.current = midPageData.table;
     if (endPageData?.table) tableMetaRef.current = endPageData.table;
-  }, [tableData?.table, prevPageData?.table, midPageData?.table, endPageData?.table]);
+  }, [
+    totalCountData?.table,
+    tableData?.table,
+    prevPageData?.table,
+    midPageData?.table,
+    endPageData?.table,
+  ]);
   const tableMeta = tableMetaRef.current;
 
   // Combine all loaded data (current + middle + end + previous pages)
@@ -316,7 +358,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
       // Cancel any outgoing refetches
       await utils.table.getTableDataPaginated.cancel({ 
         tableId,
-        viewId: currentViewId,
+        viewId: currentViewId ?? undefined,
         page: startPage,
         pageSize: PAGE_SIZE,
       });
@@ -328,7 +370,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
       // Snapshot the previous value
       const previousData = utils.table.getTableDataPaginated.getData({ 
         tableId,
-        viewId: currentViewId,
+        viewId: currentViewId ?? undefined,
         page: startPage,
         pageSize: PAGE_SIZE,
       });
@@ -339,7 +381,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
       if (context?.previousData) {
         utils.table.getTableDataPaginated.setData({ 
           tableId,
-          viewId: currentViewId,
+          viewId: currentViewId ?? undefined,
           page: startPage,
           pageSize: PAGE_SIZE,
         }, context.previousData);
@@ -356,7 +398,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
       // Cancel any outgoing refetches
       await utils.table.getTableDataPaginated.cancel({ 
         tableId,
-        viewId: currentViewId,
+        viewId: currentViewId ?? undefined,
         page: startPage,
         pageSize: PAGE_SIZE,
         sortRules: sortRules.map(rule => ({
@@ -373,7 +415,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
       // Snapshot the previous value
       const previousData = utils.table.getTableDataPaginated.getData({ 
         tableId,
-        viewId: currentViewId,
+        viewId: currentViewId ?? undefined,
         page: startPage,
         pageSize: PAGE_SIZE,
         sortRules: sortRules.map(rule => ({
@@ -393,7 +435,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
       if (context?.previousData) {
         utils.table.getTableDataPaginated.setData({ 
           tableId,
-          viewId: currentViewId,
+          viewId: currentViewId ?? undefined,
           page: startPage,
           pageSize: PAGE_SIZE,
           sortRules: sortRules.map(rule => ({
@@ -431,7 +473,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
   const reorderRowsMutation = api.table.reorderRows.useMutation({
     onSuccess: () => {
       console.log("Rows reordered, invalidating cache...");
-      void utils.table.getTableDataPaginated.invalidate({ tableId, viewId: currentViewId });
+      void utils.table.getTableDataPaginated.invalidate({ tableId, viewId: currentViewId ?? undefined });
     },
   });
 
@@ -450,7 +492,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
     
     console.log(`Moving row ${rowId} ${direction} to swap with ${targetRowId}`);
     reorderRowsMutation.mutate({
-      viewId: currentViewId,
+      viewId: currentViewId ?? undefined,
       tableId,
       aRowId: rowId,
       bRowId: targetRowId,
@@ -934,7 +976,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
           className="border-l border-b border-gray-200"
           style={{ 
             height: `${virtualizer.getTotalSize()}px`,
-            width: `${40 + (tableMeta?.columns.filter(col => !isFieldHidden(col.id)).length ?? 0) * 250}px`,
+                         width: `${40 + (tableMeta?.columns?.filter(col => !isFieldHidden(col.id)).length ?? 0) * 250}px`,
             position: 'relative',
             overflow: 'hidden', // Prevent any internal scrolling
             maxHeight: 'none' // Ensure no max-height constraints
@@ -1082,7 +1124,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
        {/* Add row button */}
        <div 
          className="border border-gray-200 border-t-0 bg-gray-50 h-9 flex items-center justify-center"
-         style={{ width: `${40 + (tableMeta?.columns.filter(col => !isFieldHidden(col.id)).length ?? 0) * 250}px` }}
+                   style={{ width: `${40 + (tableMeta?.columns?.filter(col => !isFieldHidden(col.id)).length ?? 0) * 250}px` }}
        >
          <button
            onClick={() => {
