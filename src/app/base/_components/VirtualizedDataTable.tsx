@@ -617,7 +617,9 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
     // Row number column
     const rowNumberColumn: ColumnDef<RowRecord> = {
       id: 'row-number',
-             header: () => <div className="px-2 py-1 font-medium text-gray-700">#</div>,
+             header: () => <div className="px-2 py-1 font-medium text-gray-700 text-sm">
+               <div className="w-3 h-3 border border-gray-400 rounded-sm"></div>
+             </div>,
        accessorKey: 'row-number',
        cell: ({ row }) => {
          // Get the row ID from the allRows array using the virtual index
@@ -659,9 +661,9 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
            </div>
          );
        },
-             size: 40,
-       minSize: 40,
-       maxSize: 40,
+             size: 80,
+       minSize: 80,
+       maxSize: 80,
     };
 
            // Data columns
@@ -672,7 +674,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
          header: () => (
                        <div 
               data-field-id={column.id}
-              className={`px-2 py-1 font-medium text-gray-700 cursor-pointer select-none ${
+              className={`px-2 py-1 font-medium text-gray-700 text-sm cursor-pointer select-none ${
                 isFieldHighlighted(column.id) ? 'bg-orange-100' : ''
               } ${isCurrentFieldResult(column.id) ? 'bg-orange-300' : ''}`}
              onDoubleClick={() => {
@@ -794,7 +796,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                  />
                ) : (
                                    <div className="w-full h-full pointer-events-auto overflow-hidden text-ellipsis whitespace-nowrap flex items-center">
-                    <span className="truncate block w-full">
+                    <span className="truncate block w-full" style={{ fontSize: '13px' }}>
                       {localCellValues[`${cellData.rowId}-${cellData.columnId}`] ?? cellData.value}
                     </span>
                   </div>
@@ -802,9 +804,9 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
              </div>
            );
          },
-                                                           size: 250, // Fixed width for all data columns
-                    minSize: 250,
-                    maxSize: 250,
+                                                           size: 192, // Fixed width for all data columns
+                    minSize: 192,
+                    maxSize: 192,
        })) ?? [];
 
     // Return row number column + data columns
@@ -828,8 +830,10 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
         <table className="border-collapse border border-gray-200 table-fixed">
           <thead className="bg-gray-50 sticky top-0 z-10 bg-white">
                          <tr className="h-9">
-                               <th className="border border-gray-200 h-9" style={{ width: '40px' }}>
-                 <div className="px-2 py-1 font-medium text-gray-700">#</div>
+                               <th className="border-t border-b border-l border-gray-200 h-9" style={{ width: '80px' }}>
+                 <div className="px-2 py-1 font-medium text-gray-700 text-sm">
+                   <div className="w-3 h-3 border border-gray-400 rounded-sm"></div>
+                 </div>
                </th>
                               <th className="border border-gray-200 bg-gray-50 w-8 h-9">
                  <button
@@ -890,24 +894,26 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
   return (
     <div className="w-full overflow-hidden">
                    {/* Fixed Table Header */}
-      <div className="fixed top-28 left-70 z-10 bg-white border border-gray-200 border-b-0">
+      <div className="fixed top-33 z-10 bg-[#ffffff] border border-gray-200 border-b-0" style={{ left: '335px' }}>
         <div className="flex">
           {/* Row number column header */}
-          <div className="border border-gray-200 h-9 px-2 py-1 flex items-center justify-center" style={{ width: '40px', minWidth: '40px', maxWidth: '40px' }}>
-            <div className="font-medium text-gray-700">#</div>
+          <div className="border-t border-b border-l border-gray-200 h-9 px-2 py-1 flex items-center justify-center" style={{ width: '80px', minWidth: '80px', maxWidth: '80px' }}>
+            <div className="font-medium text-gray-700 text-sm">
+              <div className="w-3 h-3 border border-gray-400 rounded-sm"></div>
+            </div>
           </div>
           
           {/* Data column headers */}
           {tableMeta?.columns
             .filter(column => !isFieldHidden(column.id))
-            .map((column) => (
+            .map((column, index) => (
               <div 
                 key={column.id}
                 data-field-id={column.id}
-                className={`border border-gray-200 h-9 px-2 py-1 flex items-center cursor-pointer select-none ${
+                className={`border-t border-b ${index === 0 ? '' : 'border-l'} border-gray-200 h-9 px-2 py-1 flex items-center cursor-pointer select-none ${
                   isFieldHighlighted(column.id) ? 'bg-orange-100' : ''
                 } ${isCurrentFieldResult(column.id) ? 'bg-orange-300' : ''}`}
-                style={{ width: '250px', minWidth: '250px', maxWidth: '250px' }}
+                style={{ width: '192px', minWidth: '192px', maxWidth: '192px' }}
                 onDoubleClick={() => {
                   setEditingColumn({
                     columnId: column.id,
@@ -945,7 +951,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                     autoFocus
                   />
                 ) : (
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 text-sm">
                     <span className="text-xs text-gray-400">
                       {column.type === 'text' ? 'A' : column.type === 'number' ? '#' : '?'}
                     </span>
@@ -973,10 +979,10 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                                  {/* Virtualized table body using main page scroll */}
         <div 
           ref={listRef}
-          className="border-l border-b border-gray-200"
+          className="border-l border-b border-gray-200 bg-[#ffffff]"
           style={{ 
             height: `${virtualizer.getTotalSize()}px`,
-                         width: `${40 + (tableMeta?.columns?.filter(col => !isFieldHidden(col.id)).length ?? 0) * 250}px`,
+                         width: `${80 + (tableMeta?.columns?.filter(col => !isFieldHidden(col.id)).length ?? 0) * 192}px`,
             position: 'relative',
             overflow: 'hidden', // Prevent any internal scrolling
             maxHeight: 'none' // Ensure no max-height constraints
@@ -1012,9 +1018,9 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                    transform: `translateY(${virtualRow.start}px)`,
                  }}
                >
-                                    <div className="h-9 border-b border-gray-200 hover:bg-gray-100 transition-colors duration-150 flex">
+                                    <div className="h-9 border-b border-gray-200 hover:bg-gray-100 transition-colors duration-150 flex bg-[#ffffff]">
                      {/* Row number */}
-                     <div className="border-r border-gray-200 flex items-center justify-center" style={{ width: '40px' }}>
+                     <div className="flex items-center justify-center" style={{ width: '80px' }}>
                        <div className="px-2 py-1 text-xs text-gray-500 font-mono">
                          {rowIndex + 1}
                        </div>
@@ -1038,9 +1044,9 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                              data-column-id={column.id}
                              className="flex items-center"
                                                            style={{ 
-                                                             width: '250px', 
-                                                             minWidth: '250px', 
-                                                             maxWidth: '250px',
+                                                             width: '192px', 
+                                                             minWidth: '192px', 
+                                                             maxWidth: '192px',
                                                              borderRight: '1px solid #e5e7eb' // Explicit right border
                                                            }}
                            >
@@ -1106,7 +1112,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                                />
                              ) : (
                                                                <div className="w-full h-full pointer-events-auto overflow-hidden text-ellipsis whitespace-nowrap flex items-center">
-                                  <span className="truncate block w-full">
+                                  <span className="truncate block w-full" style={{ fontSize: '13px' }}>
                                     {localCellValues[`${row.id}-${column.id}`] ?? cellValue}
                                   </span>
                                 </div>
@@ -1123,8 +1129,8 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
        
        {/* Add row button */}
        <div 
-         className="border border-gray-200 border-t-0 bg-gray-50 h-9 flex items-center justify-center"
-                   style={{ width: `${40 + (tableMeta?.columns?.filter(col => !isFieldHidden(col.id)).length ?? 0) * 250}px` }}
+         className="border border-gray-200 border-t-0 bg-[#ffffff] h-9 flex items-center justify-center"
+                   style={{ width: `${80 + (tableMeta?.columns?.filter(col => !isFieldHidden(col.id)).length ?? 0) * 192}px` }}
        >
          <button
            onClick={() => {

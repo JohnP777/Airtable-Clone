@@ -34,10 +34,10 @@ export function BaseContent({ baseId }: BaseContentProps) {
   return (
     <div className="w-full h-full flex">
       {/* Views sidebar - positioned to touch the third header and primary sidebar */}
-      <div className="w-56 shrink-0 border-r border-gray-200 bg-white fixed left-14 top-28 bottom-0 z-10">
+      <div className="w-70 shrink-0 border-r border-gray-200 bg-white fixed left-14 top-28 bottom-0 z-10">
         <ViewSidebar tableId={selectedTable.id} />
       </div>
-      <div className="flex-1 ml-56">
+      <div className="flex-1 ml-70 bg-[#f6f8fc]">
         <div className="p-4">
           <VirtualizedDataTable key={currentViewId} tableId={selectedTable.id} />
         </div>
