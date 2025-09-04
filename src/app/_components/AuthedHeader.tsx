@@ -9,8 +9,8 @@ export function AuthedHeader() {
   const { isPinnedOpen, setPinnedOpen } = useSidebar();
 
   return (
-    <header className="relative z-50 w-full bg-white border-b border-gray-200 shadow-sm">
-      <div className="mx-auto flex w-full h-14 items-center justify-between px-4">
+    <header className="fixed top-0 left-0 right-0 z-50 w-full bg-white border-b border-gray-200 shadow-sm">
+      <div className="mx-auto flex w-full h-14 items-center justify-between px-2">
         <div className="flex items-center gap-2">
           <div className="relative group z-50">
             <button
@@ -36,7 +36,7 @@ export function AuthedHeader() {
         </div>
 
         <div className="flex-1 px-4">
-          <div className="flex w-[23rem] items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-2 shadow-sm ml-[calc(50%-12.4rem)]">
+          <div className="flex w-[22.5rem] items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-2 shadow-sm ml-[calc(50%-11rem)]">
             <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-500">
               <circle cx="11" cy="11" r="8"></circle>
               <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
@@ -46,16 +46,16 @@ export function AuthedHeader() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <button className="flex items-center gap-1 rounded px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100">
-            <Image src="/questionmark.png" alt="Help" width={18} height={18} />
+        <div className="flex items-center gap-2">
+          <button className="flex items-center gap-1 rounded px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100">
+            <Image src="/questionmark.png" alt="Help" width={16} height={16} />
             <span>Help</span>
           </button>
           <button className="flex h-9 w-9 items-center justify-center rounded hover:bg-gray-100" aria-label="Notifications">
             <Image src="/bell.png" alt="Notifications" width={18} height={18} />
           </button>
           <button className="flex h-9 w-9 items-center justify-center rounded hover:bg-gray-100" aria-label="Profile">
-            <Image src="/profile.svg" alt="Profile" width={22} height={22} />
+            <Image src="/profile.svg" alt="Profile" width={26} height={26} />
           </button>
         </div>
       </div>

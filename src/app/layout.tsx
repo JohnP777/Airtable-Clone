@@ -26,7 +26,7 @@ export default async function RootLayout({
 
   return (
     <html lang="en" className={`${geist.variable}`}>
-      <body className={`${isLoggedIn ? "bg-[#f9fafb]" : "bg-[#f5f6ee]"} text-gray-900`}>
+      <body className={`${isLoggedIn ? "bg-[#f9fafb] h-screen overflow-hidden" : "bg-[#f5f6ee]"} text-gray-900`}>
         <TRPCReactProvider>
           {isLoggedIn ? (
             <>

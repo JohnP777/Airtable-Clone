@@ -68,12 +68,17 @@ export function BaseCard({ base, onContextMenu }: BaseCardProps) {
 
   return (
     <div
-      className="group relative rounded-lg border border-gray-200 bg-white p-4 shadow-sm cursor-pointer hover:shadow-md transition-shadow"
+      className="group relative rounded-lg border border-gray-200 bg-white py-5 px-4 min-h-24 shadow-sm cursor-pointer hover:shadow-md transition-shadow"
       onClick={handleCardClick}
     >
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-lg bg-blue-500 flex items-center justify-center text-white font-semibold text-sm">
-          {base.name.charAt(0).toUpperCase()}
+        <div 
+          className="w-16 h-16 rounded-lg flex items-center justify-center text-white font-semibold text-lg"
+          style={{ 
+            backgroundColor: `hsl(${base.name.split('').reduce((a, b) => a + b.charCodeAt(0), 0) % 360}, 70%, 50%)` 
+          }}
+        >
+          {base.name.substring(0, 2)}
         </div>
         <div className="flex-1 min-w-0">
           {isRenaming ? (
@@ -84,19 +89,30 @@ export function BaseCard({ base, onContextMenu }: BaseCardProps) {
               onChange={(e) => setNewName(e.target.value)}
               onKeyDown={handleKeyDown}
               onBlur={handleRename}
-              className="w-full text-sm font-semibold text-gray-900 bg-transparent border-none outline-none focus:ring-0"
+              className="w-full text-xs font-semibold text-gray-900 bg-transparent border-none outline-none focus:ring-0"
               placeholder="Enter name..."
             />
           ) : (
             <h3 
-              className="text-sm font-semibold text-gray-900 truncate"
+              className="text-xs font-semibold text-gray-900 truncate"
               onDoubleClick={handleDoubleClick}
             >
               {base.name}
             </h3>
           )}
-          <p className="text-xs text-gray-500">
-            Opened {new Date(base.lastOpened).toLocaleDateString()}
+          <p className="mt-2 text-xs text-gray-500">
+            {(() => {
+              const openedAt = new Date(base.lastOpened).getTime();
+              const diffMs = Date.now() - openedAt;
+              const minutes = Math.floor(diffMs / (1000 * 60));
+              const hours = Math.floor(diffMs / (1000 * 60 * 60));
+              const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+              if (minutes < 5) return "Opened just now";
+              if (minutes < 60) return `Opened ${minutes} minute${minutes !== 1 ? 's' : ''} ago`;
+              if (hours < 24) return `Opened ${hours} hour${hours !== 1 ? 's' : ''} ago`;
+              return `Opened ${days} day${days !== 1 ? 's' : ''} ago`;
+            })()}
           </p>
         </div>
       </div>

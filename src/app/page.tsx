@@ -14,7 +14,7 @@ export default async function Home() {
       <SidebarProvider>
         <AuthedHeader />
         <Sidebar />
-        <div className="pl-14 sm:pl-14">
+        <div className="pt-14 h-[calc(100vh-56px)] overflow-y-auto pl-14 sm:pl-14">
           <HomeContent />
         </div>
       </SidebarProvider>
