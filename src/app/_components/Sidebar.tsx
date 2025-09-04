@@ -35,16 +35,16 @@ export function Sidebar() {
           {/* Top icon stack */}
           <div className="flex flex-col items-center gap-3">
             <button aria-label="A" className="rounded p-1 hover:bg-gray-100">
-              <Image src="/a.png" alt="A" width={22} height={22} />
+              <Image src="/a.PNG" alt="A" width={22} height={22} />
             </button>
             <button aria-label="B" className="rounded p-1 hover:bg-gray-100">
-              <Image src="/b.png" alt="B" width={22} height={22} />
+              <Image src="/b.PNG" alt="B" width={22} height={22} />
             </button>
             <button aria-label="C" className="rounded p-1 hover:bg-gray-100">
-              <Image src="/c.png" alt="C" width={22} height={22} />
+              <Image src="/c.PNG" alt="C" width={22} height={22} />
             </button>
             <button aria-label="D" className="rounded p-1 hover:bg-gray-100">
-              <Image src="/d.png" alt="D" width={24} height={24} />
+              <Image src="/d.PNG" alt="D" width={24} height={24} />
             </button>
             {/* Short divider */}
             <div className="my-1 h-px w-6 bg-gray-200" />
@@ -55,13 +55,13 @@ export function Sidebar() {
             {/* Short divider above E */}
             <div className="mb-1 h-px w-6 bg-gray-200" />
             <button aria-label="E" className="rounded p-1 hover:bg-gray-100">
-              <Image src="/e.png" alt="E" width={18} height={18} />
+              <Image src="/e.PNG" alt="E" width={18} height={18} />
             </button>
             <button aria-label="F" className="rounded p-1 hover:bg-gray-100">
-              <Image src="/f.png" alt="F" width={18} height={18} />
+              <Image src="/f.PNG" alt="F" width={18} height={18} />
             </button>
             <button aria-label="G" className="rounded p-1 hover:bg-gray-100">
-              <Image src="/g.png" alt="G" width={18} height={18} />
+              <Image src="/g.PNG" alt="G" width={18} height={18} />
             </button>
             <button aria-label="Add" className="mb-1 rounded-md p-1 border border-gray-300 hover:bg-gray-100">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -77,20 +77,20 @@ export function Sidebar() {
             {/* Top section - main navigation */}
             <div className="px-3 space-y-1">
               <button className="flex w-full items-center gap-3 rounded-md px-3 py-2 hover:bg-gray-100">
-                <Image src="/a.png" alt="Home" width={22} height={22} />
+                <Image src="/a.PNG" alt="Home" width={22} height={22} />
                 <span className="text-base font-medium text-gray-900">Home</span>
               </button>
               <button className="flex w-full items-center gap-3 rounded-md px-3 py-2 hover:bg-gray-100">
-                <Image src="/b.png" alt="Starred" width={22} height={22} />
+                <Image src="/b.PNG" alt="Starred" width={22} height={22} />
                 <span className="text-base text-gray-900">Starred</span>
                 <span className="ml-auto text-gray-400">›</span>
               </button>
               <button className="flex w-full items-center gap-3 rounded-md px-3 py-2 hover:bg-gray-100">
-                <Image src="/c.png" alt="Shared" width={22} height={22} />
+                <Image src="/c.PNG" alt="Shared" width={22} height={22} />
                 <span className="text-base text-gray-900">Shared</span>
               </button>
               <button className="flex w-full items-center gap-3 rounded-md px-3 py-2 hover:bg-gray-100">
-                <Image src="/d.png" alt="Workspaces" width={24} height={24} />
+                <Image src="/d.PNG" alt="Workspaces" width={24} height={24} />
                 <span className="text-base text-gray-900">Workspaces</span>
                 <span className="ml-auto flex items-center gap-3 text-gray-400">
                   <span>+</span>
@@ -107,11 +107,11 @@ export function Sidebar() {
               <div className="px-3 space-y-0.5">
                 <div className="border-t border-gray-200 my-1 mx-3"></div>
                 <button className="flex w-full items-center gap-2 rounded-md px-3 py-2 hover:bg-gray-100">
-                  <Image src="/e.png" alt="Templates and apps" width={18} height={18} />
+                  <Image src="/e.PNG" alt="Templates and apps" width={18} height={18} />
                   <span className="text-xs text-gray-900">Templates and apps</span>
                 </button>
                 <button className="flex w-full items-center gap-2 rounded-md px-3 py-2 hover:bg-gray-100">
-                  <Image src="/f.png" alt="Marketplace" width={18} height={18} />
+                  <Image src="/f.PNG" alt="Marketplace" width={18} height={18} />
                   <span className="text-xs text-gray-900">Marketplace</span>
                 </button>
                 <button className="flex w-full items-center gap-2 rounded-md px-3 py-2 hover:bg-gray-100">

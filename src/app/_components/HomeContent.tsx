@@ -55,7 +55,7 @@ export function HomeContent() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f9fafb] p-4">
+    <div className="min-h-screen bg-[#f9fafb] p-4 pt-18">
       <div className={`${isPinnedOpen ? 'ml-72' : 'ml-6'} pr-4 max-w-[1480px] transition-all duration-200`}>
         <h1 className="mb-6 mt-4 text-3xl font-semibold text-gray-900" style={{ fontFamily: 'Grotesk S SH Bold, sans-serif' }}>
           Home
