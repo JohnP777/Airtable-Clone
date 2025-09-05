@@ -352,6 +352,30 @@ export const tableRouter = createTRPCRouter({
       return { ok: true };
     }),
 
+  setSortRules: protectedProcedure
+    .input(z.object({
+      viewId: z.string(),
+      sortRules: z.array(z.object({
+        columnId: z.string(),
+        direction: z.enum(["asc", "desc"]),
+      })),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await ctx.db.$transaction([
+        ctx.db.viewSortRule.deleteMany({ where: { viewId: input.viewId } }),
+        ctx.db.viewSortRule.createMany({
+          data: input.sortRules.map((r, i) => ({
+            viewId: input.viewId,
+            columnId: r.columnId,
+            direction: r.direction,
+            order: i,
+          })),
+        }),
+        ctx.db.view.update({ where: { id: input.viewId }, data: { updatedAt: new Date() } }),
+      ]);
+      return { ok: true };
+    }),
+
   // Set hidden fields for a view (replaces the old updateHiddenFields)
   setHiddenFields: protectedProcedure
     .input(z.object({ viewId: z.string(), hiddenFieldIds: z.array(z.string()) }))

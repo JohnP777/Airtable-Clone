@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useMemo, useState, useEffect, useRef } from "react";
 import { useView } from "./ViewContext";
+import { useTableContext } from "./TableContext";
 import { api } from "../../../trpc/react";
 
 export type FilterRule = {
@@ -15,6 +16,7 @@ type Ctx = {
   setFilterRules: (rules: FilterRule[]) => void;
   clearFilterRules: () => void;
   hydrated: boolean;
+  isFiltering: boolean;
 };
 
 const FilterContext = createContext<Ctx | null>(null);
@@ -31,6 +33,7 @@ interface FilterProviderProps {
 
 export function FilterProvider({ children }: FilterProviderProps) {
   const { currentViewId } = useView();
+  const { selectedTableId } = useTableContext();
   const utils = api.useUtils();
   const [byView, setByView] = useState<Record<string, FilterRule[]>>({});
   const [hydratedViews, setHydratedViews] = useState<Record<string, boolean>>({});
@@ -45,7 +48,29 @@ export function FilterProvider({ children }: FilterProviderProps) {
     }
   );
   const setRulesMutation = api.table.setFilterRules.useMutation({
-    onSuccess: () => void utils.table.getTableDataPaginated.invalidate(), // refetch all pages for this view
+    onMutate: async ({ viewId, rules }) => {
+      // Store previous rules for rollback
+      const previousRules = byView[viewId] ?? [];
+      // Optimistic context update happens before server call
+      setByView(prev => ({ ...prev, [viewId]: rules }));
+      return { previousRules };
+    },
+    onError: (err, { viewId }, context) => {
+      // Roll back context
+      if (context?.previousRules) {
+        setByView(prev => ({ ...prev, [viewId]: context.previousRules }));
+      }
+    },
+    onSettled: async (_, __, { viewId }) => {
+      if (!selectedTableId) return;
+      // Refetch, but don't nuke local rules
+      await utils.table.getTableDataPaginated.refetch({
+        tableId: selectedTableId,
+        viewId: viewId ?? undefined,
+        page: 0,
+        pageSize: 1,
+      });
+    },
   });
 
   // hydrate on load / view change
@@ -57,6 +82,7 @@ export function FilterProvider({ children }: FilterProviderProps) {
 
   const filterRules = byView[viewId ?? ''] ?? [];
   const hydrated = !!hydratedViews[viewId ?? ''];
+  const isFiltering = setRulesMutation.isPending;
 
   const setFilterRules = (rules: FilterRule[]) => {
     if (!hasView) return;
@@ -67,8 +93,8 @@ export function FilterProvider({ children }: FilterProviderProps) {
   const clearFilterRules = () => setFilterRules([]);
 
   const value = useMemo(
-    () => ({ filterRules, setFilterRules, clearFilterRules, hydrated }),
-    [filterRules, hydrated]
+    () => ({ filterRules, setFilterRules, clearFilterRules, hydrated, isFiltering }),
+    [filterRules, hydrated, isFiltering]
   );
 
   return <FilterContext.Provider value={value}>{children}</FilterContext.Provider>;
