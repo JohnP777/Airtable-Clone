@@ -1,10 +1,31 @@
 "use client";
 
-import React from "react";
+import React, { useState, useRef, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { ProfileDropdownUpward } from "../../_components/ProfileDropdownUpward";
 
 export function BaseSidebar() {
+  const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsProfileDropdownOpen(false);
+      }
+    };
+
+    if (isProfileDropdownOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isProfileDropdownOpen]);
+
   return (
     <aside
       className="fixed top-0 left-0 bottom-0 z-[999] w-14 border-r-2 border-gray-200 bg-white/80 backdrop-blur-sm"
@@ -41,10 +62,19 @@ export function BaseSidebar() {
         </div>
         
         {/* Profile icon */}
-        <div className="px-3 pb-3">
-          <button className="flex items-center justify-center w-8 h-8 rounded hover:bg-gray-100 transition-colors">
+        <div className="px-3 pb-3 relative" ref={dropdownRef}>
+          <button 
+            className={`flex items-center justify-center w-8 h-8 rounded hover:bg-gray-100 transition-colors ${
+              isProfileDropdownOpen ? 'bg-gray-100' : ''
+            }`}
+            onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
+          >
             <Image src="/profile.svg" alt="Profile" width={28} height={28} />
           </button>
+          <ProfileDropdownUpward 
+            isOpen={isProfileDropdownOpen} 
+            onClose={() => setIsProfileDropdownOpen(false)} 
+          />
         </div>
       </div>
 

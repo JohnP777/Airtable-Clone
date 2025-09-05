@@ -2,11 +2,31 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import React from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { useSidebar } from "./SidebarContext";
+import { ProfileDropdown } from "./ProfileDropdown";
 
 export function AuthedHeader() {
   const { isPinnedOpen, setPinnedOpen } = useSidebar();
+  const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsProfileDropdownOpen(false);
+      }
+    };
+
+    if (isProfileDropdownOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isProfileDropdownOpen]);
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 w-full bg-white border-b border-gray-200 shadow-sm">
@@ -54,9 +74,21 @@ export function AuthedHeader() {
           <button className="flex h-9 w-9 items-center justify-center rounded hover:bg-gray-100" aria-label="Notifications">
             <Image src="/bell.png" alt="Notifications" width={18} height={18} />
           </button>
-          <button className="flex h-9 w-9 items-center justify-center rounded hover:bg-gray-100" aria-label="Profile">
-            <Image src="/profile.svg" alt="Profile" width={26} height={26} />
-          </button>
+          <div className="relative" ref={dropdownRef}>
+            <button 
+              className={`flex h-9 w-9 items-center justify-center rounded hover:bg-gray-100 ${
+                isProfileDropdownOpen ? 'bg-gray-100' : ''
+              }`}
+              aria-label="Profile"
+              onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
+            >
+              <Image src="/profile.svg" alt="Profile" width={26} height={26} />
+            </button>
+            <ProfileDropdown 
+              isOpen={isProfileDropdownOpen} 
+              onClose={() => setIsProfileDropdownOpen(false)} 
+            />
+          </div>
         </div>
       </div>
     </header>
