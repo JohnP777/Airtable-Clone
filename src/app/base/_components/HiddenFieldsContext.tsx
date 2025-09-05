@@ -43,11 +43,20 @@ export function HiddenFieldsProvider({ children }: HiddenFieldsProviderProps) {
     onSuccess: () => void utils.table.getTableDataPaginated.invalidate(),
   });
 
-  // hydrate
+  // Invalidate and refetch when viewId changes to ensure fresh data
+  useEffect(() => {
+    if (viewId) {
+      utils.table.getViewState.invalidate({ viewId });
+    }
+  }, [viewId, utils.table.getViewState]);
+
+  // Hydrate hidden fields when data is received
   useEffect(() => {
     if (!viewId) return;
-    if (data) setByView(prev => ({ ...prev, [viewId]: new Set(data.hiddenFields ?? []) }));
-    setHydratedViews(prev => ({ ...prev, [viewId]: true })); // <-- ensure true even with empty data
+    if (data) {
+      setByView(prev => ({ ...prev, [viewId]: new Set(data.hiddenFields ?? []) }));
+      setHydratedViews(prev => ({ ...prev, [viewId]: true }));
+    }
   }, [viewId, data]);
 
   const hiddenSet = byView[viewId ?? ''] ?? new Set<string>();
@@ -76,7 +85,7 @@ export function HiddenFieldsProvider({ children }: HiddenFieldsProviderProps) {
 
   const value = useMemo(
     () => ({ isFieldHidden, toggleFieldHidden, setHiddenFields, hiddenFieldIds, hydrated }),
-    [hiddenFieldIds, hiddenSet, hydrated]
+    [hiddenFieldIds, hiddenSet, hydrated, viewId]
   );
 
   return <HiddenFieldsContext.Provider value={value}>{children}</HiddenFieldsContext.Provider>;
