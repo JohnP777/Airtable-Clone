@@ -701,6 +701,70 @@ export const tableRouter = createTRPCRouter({
       return column;
     }),
 
+  deleteColumn: protectedProcedure
+    .input(z.object({ 
+      tableId: z.string(),
+      columnId: z.string()
+    }))
+    .mutation(async ({ ctx, input }) => {
+      // Verify user owns the table
+      const table = await ctx.db.table.findFirst({
+        where: { 
+          id: input.tableId,
+          base: { createdById: ctx.session.user.id }
+        },
+        include: { columns: true }
+      });
+
+      if (!table) {
+        throw new Error("Table not found");
+      }
+
+      // Check if this is the only column (can't delete the last column)
+      if (table.columns.length <= 1) {
+        throw new Error("Cannot delete the last column");
+      }
+
+      // Check if this is the first column (primary field)
+      const columnToDelete = table.columns.find(col => col.id === input.columnId);
+      if (!columnToDelete) {
+        throw new Error("Column not found");
+      }
+
+      if (columnToDelete.order === 0) {
+        throw new Error("Cannot delete the primary field");
+      }
+
+      // Delete all cells for this column first
+      await ctx.db.tableCell.deleteMany({
+        where: {
+          tableId: input.tableId,
+          columnId: input.columnId
+        }
+      });
+
+      // Delete the column
+      await ctx.db.tableColumn.delete({
+        where: {
+          id: input.columnId
+        }
+      });
+
+      // Update the order of remaining columns
+      const remainingColumns = table.columns
+        .filter(col => col.id !== input.columnId)
+        .sort((a, b) => a.order - b.order);
+
+      for (let i = 0; i < remainingColumns.length; i++) {
+        await ctx.db.tableColumn.update({
+          where: { id: remainingColumns[i]!.id },
+          data: { order: i }
+        });
+      }
+
+      return { success: true };
+    }),
+
   // Reorder two rows within a view by swapping their positions
   reorderRows: protectedProcedure
     .input(z.object({

@@ -73,6 +73,13 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
   // State for selected column
   const [selectedColumn, setSelectedColumn] = useState<string | null>(null);
 
+  // State for column context menu
+  const [contextMenu, setContextMenu] = useState<{
+    columnId: string;
+    x: number;
+    y: number;
+  } | null>(null);
+
   // Local state to track cell values for immediate updates
   const [localCellValues, setLocalCellValues] = useState<Record<string, string>>({});
 
@@ -472,6 +479,13 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
     },
   });
 
+  const deleteColumnMutation = api.table.deleteColumn.useMutation({
+    onSuccess: () => {
+      // Invalidate cache after deleting column
+      void utils.table.getTableDataPaginated.invalidate();
+    },
+  });
+
   const addRowMutation = api.table.addRow.useMutation({
     onSuccess: () => {
       console.log("Single row added, invalidating cache...");
@@ -662,15 +676,20 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
       // Check if the click is outside any table cell
       const isTableCell = target.closest('[data-row-id][data-column-id]');
       const isTableHeader = target.closest('[data-field-id]');
-      if (!isTableCell && !isTableHeader && (selectedCell || selectedColumn)) {
+      const isContextMenu = target.closest('[data-context-menu]');
+      if (!isTableCell && !isTableHeader && !isContextMenu && (selectedCell || selectedColumn)) {
         setSelectedCell(null);
         setSelectedColumn(null);
+      }
+      // Close context menu when clicking outside
+      if (!isContextMenu && contextMenu) {
+        setContextMenu(null);
       }
     };
 
     document.addEventListener("click", handleClickOutside);
     return () => document.removeEventListener("click", handleClickOutside);
-  }, [selectedCell, selectedColumn]);
+  }, [selectedCell, selectedColumn, contextMenu]);
 
   // Helper function to check if a field (column) should be highlighted
   const isFieldHighlighted = useCallback((columnId: string) => {
@@ -698,6 +717,12 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
   const isColumnSelected = useCallback((columnId: string) => {
     return selectedColumn === columnId;
   }, [selectedColumn]);
+
+  // Helper function to check if a column is the primary field
+  // For now, we'll consider the first column as primary
+  const isPrimaryField = useCallback((columnId: string) => {
+    return tableMeta?.columns.find(col => col.id === columnId) === tableMeta?.columns[0];
+  }, [tableMeta]);
 
   // Transform table data to the format expected by the table
   const tableRows = useMemo(() => {
@@ -820,6 +845,14 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                setEditingColumn({
                  columnId: column.id,
                  name: column.name,
+               });
+             }}
+             onContextMenu={(e) => {
+               e.preventDefault();
+               setContextMenu({
+                 columnId: column.id,
+                 x: e.clientX,
+                 y: e.clientY
                });
              }}
            >
@@ -1098,6 +1131,14 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                     name: column.name,
                   });
                 }}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setContextMenu({
+                    columnId: column.id,
+                    x: e.clientX,
+                    y: e.clientY
+                  });
+                }}
               >
                 {editingColumn?.columnId === column.id ? (
                   <input
@@ -1356,6 +1397,52 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
        
        
       </div>
+
+      {/* Column Context Menu */}
+      {contextMenu && (
+        <div
+          data-context-menu
+          className="fixed bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-50 min-w-[200px]"
+          style={{
+            left: contextMenu.x,
+            top: contextMenu.y,
+          }}
+        >
+          <button
+            className={`w-full px-4 py-2 text-sm text-left hover:bg-red-50 transition-colors flex items-center gap-3 ${
+              isPrimaryField(contextMenu.columnId) 
+                ? 'text-gray-400 cursor-not-allowed' 
+                : 'text-red-600 hover:text-red-700'
+            }`}
+            disabled={isPrimaryField(contextMenu.columnId)}
+            onClick={() => {
+              if (!isPrimaryField(contextMenu.columnId)) {
+                void deleteColumnMutation.mutate({
+                  tableId,
+                  columnId: contextMenu.columnId
+                });
+              }
+              setContextMenu(null);
+            }}
+          >
+            <svg
+              className="h-4 w-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+              />
+            </svg>
+            Delete field
+          </button>
+        </div>
+      )}
      </div>
    );
  }
