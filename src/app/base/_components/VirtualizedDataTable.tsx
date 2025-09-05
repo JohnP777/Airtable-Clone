@@ -64,6 +64,15 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
     name: string;
   } | null>(null);
 
+  // State for selected cell (for single-click selection)
+  const [selectedCell, setSelectedCell] = useState<{
+    rowId: string;
+    columnId: string;
+  } | null>(null);
+
+  // State for selected column
+  const [selectedColumn, setSelectedColumn] = useState<string | null>(null);
+
   // Local state to track cell values for immediate updates
   const [localCellValues, setLocalCellValues] = useState<Record<string, string>>({});
 
@@ -555,6 +564,112 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
     }
   }, [currentResultIndex, searchResults]);
 
+  // Keyboard navigation for cell selection
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!selectedCell || !tableMeta) return;
+
+      const visibleColumns = tableMeta.columns.filter(c => !isFieldHidden(c.id));
+      const rowIndex = allRows.findIndex(r => r.id === selectedCell.rowId);
+      const colIndex = visibleColumns.findIndex(c => c.id === selectedCell.columnId);
+
+      if (rowIndex === -1 || colIndex === -1) return;
+
+      let newRowIndex = rowIndex;
+      let newColIndex = colIndex;
+
+      // Enter -> start editing selected cell (if not already editing)
+      if (e.key === "Enter") {
+        e.preventDefault();
+        
+        // If any cell is being edited, skip starting a new edit here
+        if (editingCell) {
+          return;
+        }
+
+        // Start editing the selected cell
+        const cellValue = localCellValues[`${selectedCell.rowId}-${selectedCell.columnId}`] ?? 
+                         allRows[rowIndex]?.cells.find(c => c.columnId === selectedCell.columnId)?.value ?? "";
+        setEditingCell({
+          rowId: selectedCell.rowId,
+          columnId: selectedCell.columnId,
+          value: cellValue
+        });
+        return;
+      }
+
+      // Tab -> move selection right (or wrap to next row)
+      if (e.key === "Tab") {
+        e.preventDefault();
+        newColIndex = colIndex + 1;
+
+        // If at last column, wrap to next row
+        if (newColIndex >= visibleColumns.length) {
+          newColIndex = 0;
+          newRowIndex = rowIndex + 1;
+        }
+
+        // If we have a valid next row, move to it
+        if (newRowIndex < allRows.length) {
+          setSelectedCell({
+            rowId: allRows[newRowIndex]!.id,
+            columnId: visibleColumns[newColIndex]!.id
+          });
+        }
+        return;
+      }
+
+      // Arrow key navigation
+      if (e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "ArrowLeft" || e.key === "ArrowRight") {
+        e.preventDefault();
+
+        switch (e.key) {
+          case "ArrowUp":
+            newRowIndex = Math.max(0, rowIndex - 1);
+            break;
+          case "ArrowDown":
+            newRowIndex = Math.min(allRows.length - 1, rowIndex + 1);
+            break;
+          case "ArrowLeft":
+            newColIndex = Math.max(0, colIndex - 1);
+            break;
+          case "ArrowRight":
+            newColIndex = Math.min(visibleColumns.length - 1, colIndex + 1);
+            break;
+        }
+
+        // Only update if we have a valid new position
+        if (newRowIndex >= 0 && newRowIndex < allRows.length && 
+            newColIndex >= 0 && newColIndex < visibleColumns.length) {
+          setSelectedCell({
+            rowId: allRows[newRowIndex]!.id,
+            columnId: visibleColumns[newColIndex]!.id
+          });
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedCell, allRows, tableMeta, isFieldHidden, editingCell, localCellValues]);
+
+  // Deselect cell when clicking outside the table
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      // Check if the click is outside any table cell
+      const isTableCell = target.closest('[data-row-id][data-column-id]');
+      const isTableHeader = target.closest('[data-field-id]');
+      if (!isTableCell && !isTableHeader && (selectedCell || selectedColumn)) {
+        setSelectedCell(null);
+        setSelectedColumn(null);
+      }
+    };
+
+    document.addEventListener("click", handleClickOutside);
+    return () => document.removeEventListener("click", handleClickOutside);
+  }, [selectedCell, selectedColumn]);
+
   // Helper function to check if a field (column) should be highlighted
   const isFieldHighlighted = useCallback((columnId: string) => {
     return searchResults.some(result => 
@@ -571,6 +686,16 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
     return currentResult.type === "field" && 
            currentResult.columnId === columnId;
   }, [searchResults, currentResultIndex]);
+
+  // Helper function to check if a row has a selected cell
+  const isRowSelected = useCallback((rowId: string) => {
+    return selectedCell?.rowId === rowId;
+  }, [selectedCell]);
+
+  // Helper function to check if a column is selected
+  const isColumnSelected = useCallback((columnId: string) => {
+    return selectedColumn === columnId;
+  }, [selectedColumn]);
 
   // Transform table data to the format expected by the table
   const tableRows = useMemo(() => {
@@ -676,7 +801,19 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
               data-field-id={column.id}
               className={`px-2 py-1 font-medium text-gray-700 text-sm cursor-pointer select-none ${
                 isFieldHighlighted(column.id) ? 'bg-orange-100' : ''
-              } ${isCurrentFieldResult(column.id) ? 'bg-orange-300' : ''}`}
+              } ${isCurrentFieldResult(column.id) ? 'bg-orange-300' : ''} ${
+                isColumnSelected(column.id) ? 'bg-blue-100' : ''
+              }`}
+             onClick={() => {
+               setSelectedColumn(column.id);
+               // Select the first data cell in this column
+               if (allRows.length > 0) {
+                 setSelectedCell({
+                   rowId: allRows[0]!.id,
+                   columnId: column.id
+                 });
+               }
+             }}
              onDoubleClick={() => {
                setEditingColumn({
                  columnId: column.id,
@@ -727,6 +864,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
          cell: ({ row, column: col }: { row: Row<RowRecord>; column: Column<RowRecord, unknown> }) => {
            const cellData = row.getValue<CellValue>(col.id);
            const isEditing = editingCell?.rowId === cellData.rowId && editingCell?.columnId === cellData.columnId;
+           const isSelected = selectedCell?.rowId === cellData.rowId && selectedCell?.columnId === cellData.columnId;
 
            const isHighlighted = isCellHighlighted(cellData.rowId, cellData.columnId);
            const isCurrent = isCurrentSearchResult(cellData.rowId, cellData.columnId);
@@ -737,7 +875,14 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                data-column-id={cellData.columnId}
                className={`px-2 py-1 cursor-pointer w-full h-full flex items-center pointer-events-none ${
                  isCurrent ? 'bg-orange-300' : isHighlighted ? 'bg-orange-100' : ''
+               } ${isSelected ? 'bg-white outline outline-2 outline-blue-500 p-0.5' : ''} ${
+                 isColumnSelected(cellData.columnId) && !isSelected ? 'bg-blue-50' : ''
                }`}
+               onClick={() => {
+                 setSelectedCell({ rowId: cellData.rowId, columnId: cellData.columnId });
+                 setSelectedColumn(null); // Clear column selection when clicking individual cell
+                 setEditingCell(null); // Clear editing state when clicking elsewhere
+               }}
                onDoubleClick={() => {
                  setEditingCell({
                    rowId: cellData.rowId,
@@ -767,10 +912,14 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                          value: finalValue,
                        });
                        setEditingCell(null);
+                       setSelectedCell({ rowId: editingCell.rowId, columnId: editingCell.columnId }); // Select the cell after editing
                      }
                    }}
                    onKeyDown={(e) => {
                      if (e.key === "Enter") {
+                       e.preventDefault();
+                       e.stopPropagation(); // Prevent global keydown handler from firing
+                       
                        if (editingCell) {
                          const finalValue = currentValueRef.current;
                          const cellKey = `${editingCell.rowId}-${editingCell.columnId}`;
@@ -783,12 +932,27 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                            value: finalValue,
                          });
                          setEditingCell(null);
+                         
+                         // Move selection to the row below (same column)
+                         const rowIndex = allRows.findIndex(r => r.id === editingCell.rowId);
+                         const nextRow = allRows[rowIndex + 1];
+                         if (nextRow) {
+                           setSelectedCell({
+                             rowId: nextRow.id,
+                             columnId: editingCell.columnId,
+                           });
+                         } else {
+                           // If no row below, keep same cell selected
+                           setSelectedCell({ rowId: editingCell.rowId, columnId: editingCell.columnId });
+                         }
                        }
                      } else if (e.key === "Escape") {
+                       e.stopPropagation(); // Also good practice
                        setEditingCell(null);
+                       setSelectedCell({ rowId: editingCell?.rowId ?? '', columnId: editingCell?.columnId ?? '' }); // Select the cell after canceling
                      }
                    }}
-                   className="w-full h-full bg-transparent border-none outline-none focus:ring-0 pointer-events-auto"
+                   className="w-full h-full bg-transparent border-none outline-none focus:ring-0 pointer-events-auto text-[13px]"
                    autoFocus
                    onFocus={(e) => {
                      currentValueRef.current = e.target.value;
@@ -912,8 +1076,20 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                 data-field-id={column.id}
                 className={`border-t border-b ${index === 0 ? '' : 'border-l'} border-gray-200 h-9 px-2 py-1 flex items-center cursor-pointer select-none ${
                   isFieldHighlighted(column.id) ? 'bg-orange-100' : ''
-                } ${isCurrentFieldResult(column.id) ? 'bg-orange-300' : ''}`}
+                } ${isCurrentFieldResult(column.id) ? 'bg-orange-300' : ''} ${
+                  isColumnSelected(column.id) ? 'bg-blue-100' : ''
+                }`}
                 style={{ width: '192px', minWidth: '192px', maxWidth: '192px' }}
+                onClick={() => {
+                  setSelectedColumn(column.id);
+                  // Select the first data cell in this column
+                  if (allRows.length > 0) {
+                    setSelectedCell({
+                      rowId: allRows[0]!.id,
+                      columnId: column.id
+                    });
+                  }
+                }}
                 onDoubleClick={() => {
                   setEditingColumn({
                     columnId: column.id,
@@ -1018,9 +1194,11 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                    transform: `translateY(${virtualRow.start}px)`,
                  }}
                >
-                                    <div className="h-9 border-b border-gray-200 hover:bg-gray-100 transition-colors duration-150 flex bg-[#ffffff]">
+                                    <div className={`h-9 border-b border-gray-200 hover:bg-gray-100 transition-colors duration-150 flex bg-[#ffffff] ${
+                                      isRowSelected(row.id) ? 'bg-gray-100' : ''
+                                    }`}>
                      {/* Row number */}
-                     <div className="flex items-center justify-center" style={{ width: '80px' }}>
+                     <div className={`flex items-center justify-center ${isRowSelected(row.id) ? 'bg-gray-100' : ''}`} style={{ width: '80px' }}>
                        <div className="px-2 py-1 text-xs text-gray-500 font-mono">
                          {rowIndex + 1}
                        </div>
@@ -1034,6 +1212,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                          const cellValue = cell?.value ?? '';
                          
                          const isEditing = editingCell?.rowId === row.id && editingCell?.columnId === column.id;
+                         const isSelected = selectedCell?.rowId === row.id && selectedCell?.columnId === column.id;
                          const isHighlighted = isCellHighlighted(row.id, column.id);
                          const isCurrent = isCurrentSearchResult(row.id, column.id);
                          
@@ -1042,7 +1221,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                              key={column.id}
                              data-row-id={row.id}
                              data-column-id={column.id}
-                             className="flex items-center"
+                             className={`flex items-center ${isRowSelected(row.id) && !isSelected ? 'bg-gray-100' : ''}`}
                                                            style={{ 
                                                              width: '192px', 
                                                              minWidth: '192px', 
@@ -1053,7 +1232,14 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                                                         <div 
                                className={`px-2 py-1 cursor-pointer w-full h-full flex items-center pointer-events-none ${
                                  isCurrent ? 'bg-orange-300' : isHighlighted ? 'bg-orange-100' : ''
+                               } ${isSelected ? 'bg-white outline outline-2 outline-blue-500 p-0.5' : ''} ${
+                                 isColumnSelected(column.id) && !isSelected ? 'bg-blue-50' : ''
                                }`}
+                               onClick={() => {
+                                 setSelectedCell({ rowId: row.id, columnId: column.id });
+                                 setSelectedColumn(null); // Clear column selection when clicking individual cell
+                                 setEditingCell(null); // Clear editing state when clicking elsewhere
+                               }}
                              onDoubleClick={() => {
                                setEditingCell({
                                  rowId: row.id,
@@ -1083,10 +1269,14 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                                        value: finalValue,
                                      });
                                      setEditingCell(null);
+                                     setSelectedCell({ rowId: editingCell.rowId, columnId: editingCell.columnId }); // Select the cell after editing
                                    }
                                  }}
                                  onKeyDown={(e) => {
                                    if (e.key === "Enter") {
+                                     e.preventDefault();
+                                     e.stopPropagation(); // Prevent global keydown handler from firing
+                                     
                                      if (editingCell) {
                                        const finalValue = currentValueRef.current;
                                        const cellKey = `${editingCell.rowId}-${editingCell.columnId}`;
@@ -1099,12 +1289,27 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                                          value: finalValue,
                                        });
                                        setEditingCell(null);
+                                       
+                                       // Move selection to the row below (same column)
+                                       const rowIndex = allRows.findIndex(r => r.id === editingCell.rowId);
+                                       const nextRow = allRows[rowIndex + 1];
+                                       if (nextRow) {
+                                         setSelectedCell({
+                                           rowId: nextRow.id,
+                                           columnId: editingCell.columnId,
+                                         });
+                                       } else {
+                                         // If no row below, keep same cell selected
+                                         setSelectedCell({ rowId: editingCell.rowId, columnId: editingCell.columnId });
+                                       }
                                      }
                                    } else if (e.key === "Escape") {
+                                     e.stopPropagation(); // Also good practice
                                      setEditingCell(null);
+                                     setSelectedCell({ rowId: editingCell?.rowId ?? '', columnId: editingCell?.columnId ?? '' }); // Select the cell after canceling
                                    }
                                  }}
-                                 className="w-full h-full bg-transparent border-none outline-none focus:ring-0 pointer-events-auto"
+                                 className="w-full h-full bg-transparent border-none outline-none focus:ring-0 pointer-events-auto text-[13px]"
                                  autoFocus
                                  onFocus={(e) => {
                                    currentValueRef.current = e.target.value;
