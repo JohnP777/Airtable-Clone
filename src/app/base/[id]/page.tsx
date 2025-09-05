@@ -30,13 +30,13 @@ export default async function BasePage({ params, }: { params: Promise<{ id: stri
                 <div className="min-h-screen bg-[#f6f8fc] relative overflow-hidden">
                   {/* Fixed Base Header */}
                   <div className="fixed top-0 left-0 right-0 z-50 bg-[#f6f8fc]">
-                    <BaseHeader />
+                    <BaseHeader baseId={id} />
                   </div>
                   
                   {/* Fixed Secondary banner with table buttons */}
                   <div className="fixed top-12 left-0 right-0 z-40 bg-[#f6f8fc]">
                     <div className="h-10 bg-[#fff4dc] border-b border-gray-200 flex items-center justify-between">
-                      <div className="ml-14 px-4">
+                      <div className="ml-12 px-2 pt-2">
                         <TableButtonsWrapper baseId={id} />
                       </div>
                       <div className="-mr-2 pt-2">
@@ -70,7 +70,7 @@ export default async function BasePage({ params, }: { params: Promise<{ id: stri
                            <Image src="/5.PNG" alt="Dropdown" width={12} height={12} />
                          </button>
                       </div>
-                      <div className="flex items-center space-x-2 pr-4">
+                      <div className="flex items-center space-x-2 pr-4 -mr-2">
                         <FilterSortButtons />
                       </div>
                     </div>

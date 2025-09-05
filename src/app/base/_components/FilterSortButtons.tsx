@@ -281,19 +281,20 @@ export function FilterSortButtons() {
 
   return (
     <div className="flex items-center space-x-2 relative">
-      <BulkAddRowsButton />
+      <div className="-mr-0">
+        <BulkAddRowsButton />
+      </div>
       <HideFieldsButton tableId={selectedTableId!} />
       
-      <div className="relative">
+      <div className="relative -mr-1">
         <button
           onClick={handleFilter}
-          className={`px-3 py-1 text-xs rounded border shadow-sm ${
-            showFilterDropdown 
-              ? "bg-blue-500 text-white border-blue-500" 
-              : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
-          }`}
+          className="flex items-center space-x-1 px-3 py-1 text-xs text-gray-500 hover:bg-gray-50 rounded"
         >
-          Filter
+          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path d="M3 5h18M6 12h12M10 19h4" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          <span className="font-normal" style={{ fontFamily: 'Mundo Sans Regular, sans-serif' }}>Filter</span>
         </button>
         
         {showFilterDropdown && (
@@ -418,16 +419,18 @@ export function FilterSortButtons() {
         )}
       </div>
       
-      <div className="relative">
+      <button className="flex items-center space-x-1 px-3 py-1 text-xs text-gray-500 hover:bg-gray-50 rounded -mr-2">
+        <img src="/21.PNG" alt="Group" className="h-4 w-4" />
+        <span className="font-normal" style={{ fontFamily: 'Mundo Sans Regular, sans-serif' }}>Group</span>
+      </button>
+      
+      <div className="relative -mr-1">
         <button
           onClick={handleSort}
-          className={`px-3 py-1 text-xs rounded border shadow-sm ${
-            showSortDropdown 
-              ? "bg-blue-500 text-white border-blue-500" 
-              : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
-          }`}
+          className="flex items-center space-x-1 px-3 py-1 text-xs text-gray-500 hover:bg-gray-50 rounded"
         >
-          Sort
+          <img src="/20.PNG" alt="Sort" className="h-4 w-4" />
+          <span className="font-normal" style={{ fontFamily: 'Mundo Sans Regular, sans-serif' }}>Sort</span>
         </button>
         
         {showSortDropdown && (
@@ -634,6 +637,20 @@ export function FilterSortButtons() {
           </div>
         )}
       </div>
+      
+      <button className="flex items-center space-x-1 px-3 py-1 text-xs text-gray-500 hover:bg-gray-50 rounded -mr-1">
+        <img src="/19.PNG" alt="Color" className="h-4 w-4" />
+        <span className="font-normal" style={{ fontFamily: 'Mundo Sans Regular, sans-serif' }}>Color</span>
+      </button>
+      
+      <button className="flex items-center justify-center p-2 text-gray-500 hover:bg-gray-50 rounded -mr-0">
+        <img src="/18.PNG" alt="List and sort" className="h-4 w-5" />
+      </button>
+      
+      <button className="flex items-center space-x-1 px-3 py-1 text-xs text-gray-500 hover:bg-gray-50 rounded">
+        <img src="/17.PNG" alt="Share and sync" className="h-4 w-5" />
+        <span className="font-normal" style={{ fontFamily: 'Mundo Sans Regular, sans-serif' }}>Share and sync</span>
+      </button>
       
       <SearchButton />
       

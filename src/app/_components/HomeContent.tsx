@@ -24,6 +24,8 @@ export function HomeContent() {
     position: { x: 0, y: 0 },
   });
   
+  const [renamingBaseId, setRenamingBaseId] = useState<string | null>(null);
+  
   const utils = api.useUtils();
   const { data: recentBases } = api.base.getRecent.useQuery({ limit: 10 });
   const createBaseMutation = api.base.create.useMutation({
@@ -52,6 +54,14 @@ export function HomeContent() {
 
   const closeContextMenu = () => {
     setContextMenu({ isOpen: false, baseId: "", baseName: "", position: { x: 0, y: 0 } });
+  };
+
+  const handleStartRename = (baseId: string) => {
+    setRenamingBaseId(baseId);
+  };
+
+  const handleStopRename = () => {
+    setRenamingBaseId(null);
   };
 
   return (
@@ -163,6 +173,9 @@ export function HomeContent() {
                             key={base.id}
                             base={base}
                             onContextMenu={handleContextMenu}
+                            isRenaming={renamingBaseId === base.id}
+                            onStartRename={() => handleStartRename(base.id)}
+                            onStopRename={handleStopRename}
                           />
                         ))}
                       </div>
@@ -179,6 +192,9 @@ export function HomeContent() {
                             key={base.id}
                             base={base}
                             onContextMenu={handleContextMenu}
+                            isRenaming={renamingBaseId === base.id}
+                            onStartRename={() => handleStartRename(base.id)}
+                            onStopRename={handleStopRename}
                           />
                         ))}
                       </div>
@@ -195,6 +211,9 @@ export function HomeContent() {
                             key={base.id}
                             base={base}
                             onContextMenu={handleContextMenu}
+                            isRenaming={renamingBaseId === base.id}
+                            onStartRename={() => handleStartRename(base.id)}
+                            onStopRename={handleStopRename}
                           />
                         ))}
                       </div>
@@ -221,6 +240,7 @@ export function HomeContent() {
           isOpen={contextMenu.isOpen}
           onClose={closeContextMenu}
           position={contextMenu.position}
+          onRename={() => handleStartRename(contextMenu.baseId)}
         />
     </div>
   );

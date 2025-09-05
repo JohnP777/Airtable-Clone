@@ -9,6 +9,9 @@ type Ctx = {
   currentViewId: string | null;            // <- allow null
   switchView: (id: string | null) => void; // <- allow clearing on table change
   createView: (name?: string) => Promise<void>;
+  renameView: (viewId: string, newName: string) => Promise<void>;
+  deleteView: (viewId: string) => Promise<void>;
+  duplicateView: (viewId: string) => Promise<void>;
 };
 
 const ViewContext = createContext<Ctx | null>(null);
@@ -28,6 +31,9 @@ export function ViewProvider({ baseId, children }: { baseId: string; children: R
   );
 
   const create = api.table.createView.useMutation();
+  const rename = api.table.renameView.useMutation();
+  const deleteView = api.table.deleteView.useMutation();
+  const duplicate = api.table.duplicateView.useMutation();
   const [currentViewId, setCurrentViewId] = useState<string | null>(null);
 
   // reset view when table changes
@@ -48,7 +54,25 @@ export function ViewProvider({ baseId, children }: { baseId: string; children: R
       await utils.table.listViews.invalidate({ tableId: selectedTableId });
       setCurrentViewId(v.id);
     },
-  }), [list.data, currentViewId, selectedTableId, create, utils.table.listViews]);
+    renameView: async (viewId: string, newName: string) => {
+      await rename.mutateAsync({ viewId, newName });
+      await utils.table.listViews.invalidate({ tableId: selectedTableId! });
+    },
+    deleteView: async (viewId: string) => {
+      await deleteView.mutateAsync({ viewId });
+      await utils.table.listViews.invalidate({ tableId: selectedTableId! });
+      // If we deleted the current view, switch to the first remaining view
+      if (currentViewId === viewId) {
+        const remainingViews = list.data?.filter(v => v.id !== viewId);
+        setCurrentViewId(remainingViews?.[0]?.id || null);
+      }
+    },
+    duplicateView: async (viewId: string) => {
+      const newView = await duplicate.mutateAsync({ viewId });
+      await utils.table.listViews.invalidate({ tableId: selectedTableId! });
+      setCurrentViewId(newView.id);
+    },
+  }), [list.data, currentViewId, selectedTableId, create, rename, deleteView, duplicate, utils.table.listViews]);
 
   return <ViewContext.Provider value={value}>{children}</ViewContext.Provider>;
 }

@@ -73,16 +73,17 @@ export function HideFieldsButton({ tableId }: HideFieldsButtonProps) {
   };
 
   return (
-    <div className="relative">
+    <div className="relative -mr-2">
       <button
         onClick={handleButtonClick}
-        className={`px-3 py-1 text-xs rounded border shadow-sm ${
-          showDropdown 
-            ? "bg-blue-500 text-white border-blue-500" 
-            : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
-        }`}
+        className="flex items-center space-x-1 px-3 py-1 text-xs text-gray-500 hover:bg-gray-50 rounded"
       >
-        Hide fields
+        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M4 4l16 16" strokeWidth="1.5" strokeLinecap="round" />
+        </svg>
+        <span className="font-normal" style={{ fontFamily: 'Mundo Sans Regular, sans-serif' }}>Hide fields</span>
       </button>
       
              {showDropdown && (
@@ -112,7 +113,7 @@ export function HideFieldsButton({ tableId }: HideFieldsButtonProps) {
              <div className="space-y-0 mb-2">
                {fieldsToShow.map((field) => (
                  <div key={field.id} className="flex items-center justify-between py-1 px-1 hover:bg-gray-50">
-                   <div className="flex items-center space-x-2">
+                   <div className="flex items-center space-x-0">
                      {/* Toggle Switch */}
                      <label className="flex items-center cursor-pointer">
                        <div className="relative">

@@ -9,9 +9,10 @@ interface BaseContextMenuProps {
   isOpen: boolean;
   onClose: () => void;
   position: { x: number; y: number };
+  onRename?: () => void;
 }
 
-export function BaseContextMenu({ baseId, isOpen, onClose, position }: BaseContextMenuProps) {
+export function BaseContextMenu({ baseId, isOpen, onClose, position, onRename }: BaseContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
 
   const utils = api.useUtils();
@@ -61,6 +62,10 @@ export function BaseContextMenu({ baseId, isOpen, onClose, position }: BaseConte
       }}
     >
       <button
+        onClick={() => {
+          onRename?.();
+          onClose();
+        }}
         className="flex w-full items-center gap-3 px-3 py-2 text-xs text-gray-700 hover:bg-gray-100"
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

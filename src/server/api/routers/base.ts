@@ -41,7 +41,7 @@ export const baseRouter = createTRPCRouter({
       const table = await ctx.db.table.create({
         data: {
           baseId: base.id,
-          name: "Employee Directory",
+          name: "Table 1",
           order: 0,
           columns: {
             create: fakeData.columns
@@ -89,6 +89,28 @@ export const baseRouter = createTRPCRouter({
         });
       }
 
+      return base;
+    }),
+
+  getById: protectedProcedure
+    .input(z.object({
+      id: z.string(),
+    }))
+    .query(async ({ ctx, input }) => {
+      const base = await ctx.db.base.findFirst({
+        where: {
+          id: input.id,
+          createdById: ctx.session.user.id,
+        },
+        select: {
+          id: true,
+          name: true,
+          createdAt: true,
+          updatedAt: true,
+          lastOpened: true,
+          createdById: true,
+        },
+      });
       return base;
     }),
 

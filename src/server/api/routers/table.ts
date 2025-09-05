@@ -146,6 +146,110 @@ export const tableRouter = createTRPCRouter({
       return view;
     }),
 
+  renameView: protectedProcedure
+    .input(z.object({ viewId: z.string(), newName: z.string().min(1).max(100) }))
+    .mutation(async ({ ctx, input }) => {
+      // verify access
+      const view = await ctx.db.view.findFirst({
+        where: { 
+          id: input.viewId, 
+          table: { base: { createdById: ctx.session.user.id } } 
+        }
+      });
+      if (!view) throw new Error("View not found");
+
+      const updatedView = await ctx.db.view.update({
+        where: { id: input.viewId },
+        data: { name: input.newName },
+        select: { id: true, name: true, type: true, order: true }
+      });
+      return updatedView;
+    }),
+
+  deleteView: protectedProcedure
+    .input(z.object({ viewId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      // verify access
+      const view = await ctx.db.view.findFirst({
+        where: { 
+          id: input.viewId, 
+          table: { base: { createdById: ctx.session.user.id } } 
+        },
+        include: { table: true }
+      });
+      if (!view) throw new Error("View not found");
+
+      // Check if this is the last view
+      const viewCount = await ctx.db.view.count({ 
+        where: { tableId: view.tableId } 
+      });
+      if (viewCount <= 1) {
+        throw new Error("Cannot delete the last remaining view");
+      }
+
+      await ctx.db.view.delete({ where: { id: input.viewId } });
+      return { success: true };
+    }),
+
+  duplicateView: protectedProcedure
+    .input(z.object({ viewId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      // verify access and get original view
+      const originalView = await ctx.db.view.findFirst({
+        where: { 
+          id: input.viewId, 
+          table: { base: { createdById: ctx.session.user.id } } 
+        },
+        include: {
+          sortRules: true,
+          filterRules: true,
+          table: true
+        }
+      });
+      if (!originalView) throw new Error("View not found");
+
+      const count = await ctx.db.view.count({ where: { tableId: originalView.tableId } });
+      
+      // Create new view
+      const newView = await ctx.db.view.create({
+        data: {
+          tableId: originalView.tableId,
+          name: `${originalView.name} copy`,
+          type: originalView.type,
+          order: count,
+          hiddenFields: originalView.hiddenFields,
+        },
+        select: { id: true, name: true, type: true, order: true }
+      });
+
+      // Copy sort rules
+      if (originalView.sortRules.length > 0) {
+        await ctx.db.viewSortRule.createMany({
+          data: originalView.sortRules.map(rule => ({
+            viewId: newView.id,
+            columnId: rule.columnId,
+            direction: rule.direction,
+            order: rule.order
+          }))
+        });
+      }
+
+      // Copy filter rules
+      if (originalView.filterRules.length > 0) {
+        await ctx.db.viewFilterRule.createMany({
+          data: originalView.filterRules.map(rule => ({
+            viewId: newView.id,
+            columnId: rule.columnId,
+            operator: rule.operator,
+            value: rule.value,
+            order: rule.order
+          }))
+        });
+      }
+
+      return newView;
+    }),
+
   getView: protectedProcedure
     .input(z.object({ viewId: z.string(), tableId: z.string() }))
     .query(async ({ ctx, input }) => {
@@ -442,7 +546,10 @@ export const tableRouter = createTRPCRouter({
     }),
 
   createTable: protectedProcedure
-    .input(z.object({ baseId: z.string() }))
+    .input(z.object({ 
+      baseId: z.string(),
+      name: z.string().optional()
+    }))
     .mutation(async ({ ctx, input }) => {
       // Verify user owns the base
       const base = await ctx.db.base.findFirst({
@@ -467,7 +574,7 @@ export const tableRouter = createTRPCRouter({
       const table = await ctx.db.table.create({
         data: {
           baseId: input.baseId,
-          name: `Table ${tableCount + 1}`,
+          name: input.name || `Table ${tableCount + 1}`,
           order: tableCount,
           columns: {
             create: fakeData.columns
@@ -1402,5 +1509,83 @@ export const tableRouter = createTRPCRouter({
           nextOffset: windowEnd < totalMatches ? windowEnd : undefined
         }
       };
+    }),
+
+  // Delete table mutation
+  deleteTable: protectedProcedure
+    .input(z.object({ 
+      tableId: z.string()
+    }))
+    .mutation(async ({ ctx, input }) => {
+      // Verify user owns the table
+      const table = await ctx.db.table.findFirst({
+        where: {
+          id: input.tableId,
+          base: {
+            createdById: ctx.session.user.id
+          }
+        }
+      });
+
+      if (!table) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Table not found or you don't have permission to delete it"
+        });
+      }
+
+      // Check if this is the last table in the base
+      const tableCount = await ctx.db.table.count({
+        where: {
+          baseId: table.baseId
+        }
+      });
+
+      if (tableCount <= 1) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Cannot delete the last remaining table in the base"
+        });
+      }
+
+      // Delete the table (cascade will handle related data)
+      await ctx.db.table.delete({
+        where: { id: input.tableId }
+      });
+
+      return { success: true };
+    }),
+
+  // Rename table mutation
+  renameTable: protectedProcedure
+    .input(z.object({ 
+      tableId: z.string(),
+      newName: z.string().min(1).max(100)
+    }))
+    .mutation(async ({ ctx, input }) => {
+      // Verify user owns the table
+      const table = await ctx.db.table.findFirst({
+        where: {
+          id: input.tableId,
+          base: {
+            createdById: ctx.session.user.id
+          }
+        }
+      });
+
+      if (!table) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Table not found or you don't have permission to rename it"
+        });
+      }
+
+      // Update the table name
+      const updatedTable = await ctx.db.table.update({
+        where: { id: input.tableId },
+        data: { name: input.newName }
+      });
+
+      return { success: true, table: updatedTable };
     })
 }); 

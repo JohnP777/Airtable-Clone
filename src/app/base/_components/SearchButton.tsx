@@ -209,13 +209,9 @@ export function SearchButton() {
     <div className="relative">
       <button
         onClick={handleSearchClick}
-        className={`px-3 py-1 text-xs rounded border shadow-sm flex items-center space-x-1 ${
-          showSearchDropdown || isSearchActive
-            ? "bg-blue-500 text-white border-blue-500" 
-            : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
-        }`}
+        className="p-2 text-xs rounded flex items-center justify-center text-gray-500 hover:bg-gray-50"
       >
-        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
         </svg>
       </button>
