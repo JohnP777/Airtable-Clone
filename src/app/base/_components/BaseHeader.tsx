@@ -107,7 +107,7 @@ export function BaseHeader({ baseId }: BaseHeaderProps) {
           >
             {currentBase?.name.substring(0, 2) || "Un"}
           </div>
-          <div className="relative ml-2" ref={dropdownRef}>
+          <div className="relative ml-0.5" ref={dropdownRef}>
             <button
               onClick={() => setIsDropdownOpen(!isDropdownOpen)}
               className="flex items-center hover:bg-gray-50 rounded-lg px-2 py-1 transition-colors"
