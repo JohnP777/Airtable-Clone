@@ -591,6 +591,9 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
   // Keyboard navigation for cell selection
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // If editing, don't intercept arrow keys, Enter, Tab, etc.
+      if (editingCell) return;
+      
       if (!selectedCell || !tableMeta) return;
 
       const visibleColumns = tableMeta.columns.filter(c => !isFieldHidden(c.id));
@@ -926,7 +929,12 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                } ${isSelected ? 'bg-white outline outline-2 outline-blue-500 p-0.5' : ''} ${
                  isColumnSelected(cellData.columnId) && !isSelected ? 'bg-blue-50' : ''
                }`}
-               onClick={() => {
+               onClick={(e) => {
+                 if (isEditing) {
+                   // Let the input handle clicks — do not re-select or reset editing
+                   e.stopPropagation();
+                   return;
+                 }
                  setSelectedCell({ rowId: cellData.rowId, columnId: cellData.columnId });
                  setSelectedColumn(null); // Clear column selection when clicking individual cell
                  setEditingCell(null); // Clear editing state when clicking elsewhere
@@ -1294,7 +1302,12 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                                } ${isSelected ? 'bg-white outline outline-2 outline-blue-500 p-0.5' : ''} ${
                                  isColumnSelected(column.id) && !isSelected ? 'bg-blue-50' : ''
                                }`}
-                               onClick={() => {
+                               onClick={(e) => {
+                                 if (isEditing) {
+                                   // Let the input handle clicks — do not re-select or reset editing
+                                   e.stopPropagation();
+                                   return;
+                                 }
                                  setSelectedCell({ rowId: row.id, columnId: column.id });
                                  setSelectedColumn(null); // Clear column selection when clicking individual cell
                                  setEditingCell(null); // Clear editing state when clicking elsewhere
