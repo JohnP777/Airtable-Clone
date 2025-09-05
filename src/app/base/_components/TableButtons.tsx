@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { api } from "../../../trpc/react";
 
+
 interface TableButtonsProps {
   baseId: string;
   onTableSelect: (tableId: string) => void;
@@ -170,39 +171,46 @@ export function TableButtons({ baseId, onTableSelect, selectedTableId }: TableBu
   }
 
   return (
-    <div className="flex items-center space-x-0" ref={dropdownRef}>
-      {tables?.map((table, index) => (
+    <div className="flex items-center space-x-2" ref={dropdownRef}>
+        {tables?.map((table, index) => (
         <div key={table.id} className="relative">
-          <button
-            onClick={() => handleTableSelect(table.id)}
-            className={`flex items-center ${index === 0 ? 'pl-4' : 'pl-2'} pr-1 py-3 text-[13px] ${
+          <div
+            className={`flex items-center ${index === 0 ? 'pl-4' : 'pl-2'} pr-1 py-3 text-[13px] cursor-pointer ${
               selectedTableId === table.id
                 ? "text-black font-semibold bg-white rounded-t-lg -mb-px"
                 : "text-gray-700 hover:text-gray-900"
             }`}
             style={{ fontFamily: 'Mundo Sans Regular, sans-serif' }}
+            onClick={() => handleTableSelect(table.id)}
           >
             <span className="flex-1 text-left">{table.name}</span>
-            <div className="ml-1 w-4 h-4 flex items-center justify-center">
-              {selectedTableId === table.id && (
-                <button 
-                  onClick={(e) => {
+            {selectedTableId === table.id && (
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setOpenDropdown(openDropdown === table.id ? null : table.id);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
                     e.stopPropagation();
                     setOpenDropdown(openDropdown === table.id ? null : table.id);
-                  }}
-                  className="p-0.5 hover:bg-gray-100 rounded"
-                >
-                  <svg className="h-3 w-3 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-              )}
-            </div>
-          </button>
+                  }
+                }}
+                className="ml-1 p-0.5 hover:bg-gray-100 rounded cursor-pointer"
+              >
+                <svg className="h-3 w-3 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+            )}
+          </div>
           
           {/* Dropdown Menu */}
           {openDropdown === table.id && (
-            <div className={`absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 ${editingTableId === table.id ? 'w-80' : deletingTableId === table.id ? 'w-64' : 'w-48'}`}>
+            <div className={`absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-[9999] ${editingTableId === table.id ? 'w-80' : deletingTableId === table.id ? 'w-64' : 'w-48'}`}>
               {editingTableId === table.id ? (
                 // Rename form
                 <div className="p-4">
@@ -319,7 +327,7 @@ export function TableButtons({ baseId, onTableSelect, selectedTableId }: TableBu
 
         {/* Add Table Dropdown */}
         {showAddTableDropdown && (
-          <div className="absolute top-full left-0 transform -translate-x-40 mt-1 w-64 bg-white border border-gray-200 rounded-md shadow-lg z-50">
+          <div className="absolute top-full left-0 transform -translate-x-40 mt-1 w-64 bg-white border border-gray-200 rounded-md shadow-lg z-[9999]">
             <div className="p-3">
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -361,7 +369,6 @@ export function TableButtons({ baseId, onTableSelect, selectedTableId }: TableBu
           </div>
         )}
       </div>
-
     </div>
   );
 }
