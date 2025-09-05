@@ -102,7 +102,7 @@ export function BaseHeader({ baseId }: BaseHeaderProps) {
           <div 
             className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-semibold text-sm"
             style={{ 
-              backgroundColor: `hsl(${currentBase?.name.split('').reduce((a, b) => a + b.charCodeAt(0), 0) % 360}, 70%, 50%)` 
+              backgroundColor: `hsl(${currentBase?.name ? currentBase.name.split('').reduce((a, b) => a + b.charCodeAt(0), 0) % 360 : 0}, 70%, 50%)` 
             }}
           >
             {currentBase?.name.substring(0, 2) || "Un"}
