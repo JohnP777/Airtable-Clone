@@ -11,7 +11,7 @@ const BULK_OPERATION_CONFIG = {
   BATCH_SIZE: 1000,
   // Maximum concurrent batches to avoid overwhelming the database
   // Reduced from 4 to 2 for more stable performance with larger datasets
-  MAX_CONCURRENT_BATCHES: 2,
+  MAX_CONCURRENT_BATCHES: 6,
   // Progress update interval in milliseconds
   PROGRESS_UPDATE_INTERVAL: 100,
   // Enable database-specific optimizations

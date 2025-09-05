@@ -82,6 +82,9 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
 
   // Local state to track cell values for immediate updates
   const [localCellValues, setLocalCellValues] = useState<Record<string, string>>({});
+  
+  // Local state to track column names for immediate updates
+  const [localColumnNames, setLocalColumnNames] = useState<Record<string, string>>({});
 
   // Wait for contexts to be hydrated before enabling queries
   const hasView = !!currentViewId;
@@ -428,6 +431,9 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
         }))
       });
       
+      // Update local column name immediately for instant UI feedback
+      setLocalColumnNames(prev => ({ ...prev, [columnId]: name }));
+      
       // Snapshot the previous value
       const previousData = utils.table.getTableDataPaginated.getData({ 
         tableId,
@@ -444,7 +450,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
           value: rule.value
         }))
       });
-      return { previousData };
+      return { previousData, previousColumnName: tableMeta?.columns.find(col => col.id === columnId)?.name };
     },
     onError: (err, { columnId }, context) => {
       // Roll back on error
@@ -464,6 +470,10 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
             value: rule.value
         }))
         }, context.previousData);
+      }
+      // Roll back local column name
+      if (context?.previousColumnName) {
+        setLocalColumnNames(prev => ({ ...prev, [columnId]: context.previousColumnName! }));
       }
     },
     onSettled: () => {
@@ -844,7 +854,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
              onDoubleClick={() => {
                setEditingColumn({
                  columnId: column.id,
-                 name: column.name,
+                 name: localColumnNames[column.id] ?? column.name,
                });
              }}
              onContextMenu={(e) => {
@@ -859,7 +869,10 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
              {editingColumn?.columnId === column.id ? (
                <input
                  type="text"
-                 defaultValue={editingColumn.name}
+                 value={editingColumn.name}
+                 onChange={(e) => {
+                   setEditingColumn(prev => prev ? { ...prev, name: e.target.value } : null);
+                 }}
                  onBlur={() => {
                    if (editingColumn) {
                      void updateColumnMutation.mutate({
@@ -890,7 +903,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                  <span className="text-xs text-gray-400">
                    {column.type === 'text' ? 'A' : column.type === 'number' ? '#' : '?'}
                  </span>
-                 {column.name}
+                 {localColumnNames[column.id] ?? column.name}
                </div>
              )}
            </div>
@@ -1010,7 +1023,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
 
     // Return row number column + data columns
     return [rowNumberColumn, ...dataColumns];
-  }, [tableData, editingColumn, editingCell, updateColumnMutation, updateCellMutation, tableId, localCellValues, isCellHighlighted, isCurrentSearchResult, isFieldHighlighted, isCurrentFieldResult, isFieldHidden]);
+  }, [tableData, editingColumn, editingCell, updateColumnMutation, updateCellMutation, tableId, localCellValues, localColumnNames, isCellHighlighted, isCurrentSearchResult, isFieldHighlighted, isCurrentFieldResult, isFieldHidden]);
 
   const table = useReactTable({
     data: tableRows,
@@ -1128,7 +1141,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                 onDoubleClick={() => {
                   setEditingColumn({
                     columnId: column.id,
-                    name: column.name,
+                    name: localColumnNames[column.id] ?? column.name,
                   });
                 }}
                 onContextMenu={(e) => {
@@ -1143,7 +1156,10 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                 {editingColumn?.columnId === column.id ? (
                   <input
                     type="text"
-                    defaultValue={editingColumn.name}
+                    value={editingColumn.name}
+                    onChange={(e) => {
+                      setEditingColumn(prev => prev ? { ...prev, name: e.target.value } : null);
+                    }}
                     onBlur={() => {
                       if (editingColumn) {
                         void updateColumnMutation.mutate({
@@ -1174,7 +1190,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                     <span className="text-xs text-gray-400">
                       {column.type === 'text' ? 'A' : column.type === 'number' ? '#' : '?'}
                     </span>
-                    {column.name}
+                    {localColumnNames[column.id] ?? column.name}
                   </div>
                 )}
               </div>
