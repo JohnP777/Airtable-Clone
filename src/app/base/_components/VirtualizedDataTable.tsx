@@ -601,6 +601,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
       // Tab -> move selection right (or wrap to next row)
       if (e.key === "Tab") {
         e.preventDefault();
+        setSelectedColumn(null); // Clear column selection when using Tab
         newColIndex = colIndex + 1;
 
         // If at last column, wrap to next row
@@ -622,6 +623,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
       // Arrow key navigation
       if (e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "ArrowLeft" || e.key === "ArrowRight") {
         e.preventDefault();
+        setSelectedColumn(null); // Clear column selection when using arrow keys
 
         switch (e.key) {
           case "ArrowUp":
