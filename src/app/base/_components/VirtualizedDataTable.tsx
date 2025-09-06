@@ -618,6 +618,54 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
     return value;
   };
 
+  // Function to scroll to keep selected cell visible (only if out of view)
+  const scrollToSelectedCell = useCallback((rowId: string, columnId: string) => {
+    // Find the cell element
+    const cellElement = document.querySelector(
+      `[data-row-id="${rowId}"][data-column-id="${columnId}"]`
+    );
+    
+    if (cellElement) {
+      // Check if the cell is already visible in the viewport
+      const rect = cellElement.getBoundingClientRect();
+      const viewportHeight = window.innerHeight;
+      const viewportWidth = window.innerWidth;
+      
+      // Account for fixed headers - the table content starts below the headers
+      const headerOffset = 132; // Height of fixed headers (top-22 = 88px + some margin)
+      const effectiveViewportTop = headerOffset;
+      const effectiveViewportBottom = viewportHeight;
+      
+      // Add a small margin to trigger scroll before hitting the exact edge
+      const margin = 20; // 20px margin to trigger scroll slightly before the edge
+      
+      // Check if any part of the cell is outside or near the edge of the visible area
+      const isOutOfView = 
+        rect.top < (effectiveViewportTop + margin) || 
+        rect.bottom > (effectiveViewportBottom - margin) ||
+        rect.left < margin || 
+        rect.right > (viewportWidth - margin);
+      
+      console.log('Cell visibility check:', {
+        rowId,
+        columnId,
+        rect: { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right },
+        viewport: { top: effectiveViewportTop, bottom: effectiveViewportBottom, width: viewportWidth },
+        isOutOfView
+      });
+      
+      // Only scroll if the cell is out of view
+      if (isOutOfView) {
+        console.log('Scrolling to cell:', rowId, columnId);
+        cellElement.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center',
+          inline: 'nearest'
+        });
+      }
+    }
+  }, []);
+
   // Scroll to current search result when it changes
   useEffect(() => {
     if (searchResults.length > 0 && currentResultIndex < searchResults.length) {
@@ -706,10 +754,14 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
 
         // If we have a valid next row, move to it
         if (newRowIndex < allRows.length) {
+          const newRowId = allRows[newRowIndex]!.id;
+          const newColumnId = visibleColumns[newColIndex]!.id;
           setSelectedCell({
-            rowId: allRows[newRowIndex]!.id,
-            columnId: visibleColumns[newColIndex]!.id
+            rowId: newRowId,
+            columnId: newColumnId
           });
+          // Scroll to keep the selected cell visible
+          scrollToSelectedCell(newRowId, newColumnId);
         }
         return;
       }
@@ -737,10 +789,14 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
         // Only update if we have a valid new position
         if (newRowIndex >= 0 && newRowIndex < allRows.length && 
             newColIndex >= 0 && newColIndex < visibleColumns.length) {
+          const newRowId = allRows[newRowIndex]!.id;
+          const newColumnId = visibleColumns[newColIndex]!.id;
           setSelectedCell({
-            rowId: allRows[newRowIndex]!.id,
-            columnId: visibleColumns[newColIndex]!.id
+            rowId: newRowId,
+            columnId: newColumnId
           });
+          // Scroll to keep the selected cell visible
+          scrollToSelectedCell(newRowId, newColumnId);
         }
       }
     };
