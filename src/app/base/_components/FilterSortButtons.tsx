@@ -448,8 +448,21 @@ export function FilterSortButtons() {
                             value={rule.direction}
                             onChange={(e) => handleUpdateSortRule(rule.columnId, "direction", e.target.value)}
                           >
-                            <option value="asc">A → Z</option>
-                            <option value="desc">Z → A</option>
+                            {(() => {
+                              const column = tableMeta?.columns?.find((col: any) => col.id === rule.columnId);
+                              const isNumberColumn = column?.type === 'number';
+                              return isNumberColumn ? (
+                                <>
+                                  <option value="asc">1 → 9</option>
+                                  <option value="desc">9 → 1</option>
+                                </>
+                              ) : (
+                                <>
+                                  <option value="asc">A → Z</option>
+                                  <option value="desc">Z → A</option>
+                                </>
+                              );
+                            })()}
                           </select>
                           <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
                             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -495,7 +508,12 @@ export function FilterSortButtons() {
                     {/* Add another sort button */}
                     <button 
                       onClick={handleAddSortRule}
-                      className="flex items-center text-sm text-gray-700 hover:text-gray-900 mt-4"
+                      disabled={getAvailableColumns().length === 0}
+                      className={`flex items-center text-sm mt-4 ${
+                        getAvailableColumns().length === 0 
+                          ? 'text-gray-400 cursor-not-allowed' 
+                          : 'text-gray-700 hover:text-gray-900'
+                      }`}
                     >
                       <svg className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />

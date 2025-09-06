@@ -80,6 +80,11 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
     y: number;
   } | null>(null);
 
+  // State for new column dropdown
+  const [showNewColumnDropdown, setShowNewColumnDropdown] = useState(false);
+  const [newColumnType, setNewColumnType] = useState<'text' | 'number' | null>(null);
+  const [newColumnName, setNewColumnName] = useState('');
+
   // Local state to track cell values for immediate updates
   const [localCellValues, setLocalCellValues] = useState<Record<string, string>>({});
   
@@ -486,6 +491,10 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
     onSuccess: () => {
       // Invalidate cache after adding column
       void utils.table.getTableDataPaginated.invalidate();
+      // Close dropdown and reset state
+      setShowNewColumnDropdown(false);
+      setNewColumnName('');
+      setNewColumnType(null);
     },
   });
 
@@ -541,6 +550,41 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
     );
   }, [searchResults]);
 
+  // New column dropdown handlers
+  const handleOpenNewColumnDropdown = () => {
+    setShowNewColumnDropdown(true);
+    setNewColumnName('');
+    setNewColumnType(null);
+  };
+
+  const handleCloseNewColumnDropdown = () => {
+    setShowNewColumnDropdown(false);
+    setNewColumnName('');
+    setNewColumnType(null);
+  };
+
+  const handleSelectColumnType = (type: 'text' | 'number') => {
+    setNewColumnType(type);
+  };
+
+  const handleCreateColumn = () => {
+    if (tableId && newColumnType) {
+      addColumnMutation.mutate({
+        tableId,
+        name: newColumnName.trim() || undefined,
+        type: newColumnType
+      });
+    }
+  };
+
+  const handleNewColumnKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleCreateColumn();
+    } else if (e.key === 'Escape') {
+      handleCloseNewColumnDropdown();
+    }
+  };
+
   // Helper function to check if current cell is the active search result
   const isCurrentSearchResult = useCallback((rowId: string, columnId: string) => {
     if (searchResults.length === 0 || currentResultIndex >= searchResults.length) return false;
@@ -550,6 +594,29 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
            currentResult.rowId === rowId && 
            currentResult.columnId === columnId;
   }, [searchResults, currentResultIndex]);
+
+  // Helper function to get column type
+  const getColumnType = (columnId: string): string => {
+    return tableMeta?.columns?.find((col: any) => col.id === columnId)?.type ?? 'text';
+  };
+
+  // Helper function to validate number input
+  const isValidNumberInput = (value: string): boolean => {
+    if (value === '') return true; // Empty is valid
+    return !isNaN(Number(value)) && isFinite(Number(value));
+  };
+
+  // Helper function to format number input (add .0 if no decimal point)
+  const formatNumberInput = (value: string): string => {
+    if (value === '') return value;
+    if (!isValidNumberInput(value)) return value;
+    
+    // If it doesn't contain a decimal point, add .0
+    if (!value.includes('.')) {
+      return value + '.0';
+    }
+    return value;
+  };
 
   // Scroll to current search result when it changes
   useEffect(() => {
@@ -953,39 +1020,91 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                    type="text"
                    defaultValue={editingCell?.value ?? ""}
                    onChange={(e) => {
-                     currentValueRef.current = e.target.value;
-                   }}
-                   onBlur={() => {
-                     if (editingCell) {
-                       const finalValue = currentValueRef.current;
-                       const cellKey = `${editingCell.rowId}-${editingCell.columnId}`;
-                       setLocalCellValues(prev => ({ ...prev, [cellKey]: finalValue }));
-                       
-                       void updateCellMutation.mutate({
-                         tableId,
-                         rowId: editingCell.rowId,
-                         columnId: editingCell.columnId,
-                         value: finalValue,
-                       });
-                       setEditingCell(null);
-                       setSelectedCell({ rowId: editingCell.rowId, columnId: editingCell.columnId }); // Select the cell after editing
+                     const value = e.target.value;
+                     const columnType = getColumnType(cellData.columnId);
+                     
+                     // For number columns, only allow valid number input
+                     if (columnType === 'number') {
+                       if (value === '' || isValidNumberInput(value)) {
+                         currentValueRef.current = value;
+                       } else {
+                         // Prevent invalid input by not updating the value
+                         e.target.value = currentValueRef.current;
+                         return;
+                       }
+                     } else {
+                       currentValueRef.current = value;
                      }
                    }}
                    onKeyDown={(e) => {
+                     const columnType = getColumnType(cellData.columnId);
+                     
+                     // For number columns, prevent non-numeric input
+                     if (columnType === 'number') {
+                       // Allow: backspace, delete, tab, escape, enter, and arrow keys
+                       if ([8, 9, 27, 13, 37, 38, 39, 40, 46].includes(e.keyCode)) {
+                         // Handle Enter key
+                         if (e.keyCode === 13) {
+                           e.preventDefault();
+                           e.stopPropagation();
+                           
+                           if (editingCell) {
+                             const finalValue = currentValueRef.current;
+                             const columnType = getColumnType(editingCell.columnId);
+                             const formattedValue = columnType === 'number' ? formatNumberInput(finalValue) : finalValue;
+                             const cellKey = `${editingCell.rowId}-${editingCell.columnId}`;
+                             setLocalCellValues(prev => ({ ...prev, [cellKey]: formattedValue }));
+                             
+                             void updateCellMutation.mutate({
+                               tableId,
+                               rowId: editingCell.rowId,
+                               columnId: editingCell.columnId,
+                               value: formattedValue,
+                             });
+                             setEditingCell(null);
+                             
+                             // Move selection to the row below (same column)
+                             const rowIndex = allRows.findIndex(r => r.id === editingCell.rowId);
+                             const nextRow = allRows[rowIndex + 1];
+                             if (nextRow) {
+                               setSelectedCell({
+                                 rowId: nextRow.id,
+                                 columnId: editingCell.columnId,
+                               });
+                             } else {
+                               setSelectedCell({ rowId: editingCell.rowId, columnId: editingCell.columnId });
+                             }
+                           }
+                         }
+                         return;
+                       }
+                       // Allow: Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X, Ctrl+Z
+                       if ((e.ctrlKey || e.metaKey) && [65, 67, 86, 88, 90].includes(e.keyCode)) {
+                         return;
+                       }
+                       // Allow: numbers, decimal point, minus sign
+                       if (!/[0-9.-]/.test(e.key)) {
+                         e.preventDefault();
+                         return;
+                       }
+                     }
+                     
                      if (e.key === "Enter") {
                        e.preventDefault();
-                       e.stopPropagation(); // Prevent global keydown handler from firing
+                       e.stopPropagation();
                        
                        if (editingCell) {
                          const finalValue = currentValueRef.current;
+                         const columnType = getColumnType(editingCell.columnId);
+                         const formattedValue = columnType === 'number' ? formatNumberInput(finalValue) : finalValue;
                          const cellKey = `${editingCell.rowId}-${editingCell.columnId}`;
-                         setLocalCellValues(prev => ({ ...prev, [cellKey]: finalValue }));
+                         setLocalCellValues(prev => ({ ...prev, [cellKey]: formattedValue }));
                          
                          void updateCellMutation.mutate({
                            tableId,
                            rowId: editingCell.rowId,
                            columnId: editingCell.columnId,
-                           value: finalValue,
+                           value: formattedValue,
                          });
                          setEditingCell(null);
                          
@@ -998,14 +1117,31 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                              columnId: editingCell.columnId,
                            });
                          } else {
-                           // If no row below, keep same cell selected
                            setSelectedCell({ rowId: editingCell.rowId, columnId: editingCell.columnId });
                          }
                        }
                      } else if (e.key === "Escape") {
-                       e.stopPropagation(); // Also good practice
+                       e.stopPropagation();
                        setEditingCell(null);
-                       setSelectedCell({ rowId: editingCell?.rowId ?? '', columnId: editingCell?.columnId ?? '' }); // Select the cell after canceling
+                       setSelectedCell({ rowId: editingCell?.rowId ?? '', columnId: editingCell?.columnId ?? '' });
+                     }
+                   }}
+                   onBlur={() => {
+                     if (editingCell) {
+                       const finalValue = currentValueRef.current;
+                       const columnType = getColumnType(editingCell.columnId);
+                       const formattedValue = columnType === 'number' ? formatNumberInput(finalValue) : finalValue;
+                       const cellKey = `${editingCell.rowId}-${editingCell.columnId}`;
+                       setLocalCellValues(prev => ({ ...prev, [cellKey]: formattedValue }));
+                       
+                       void updateCellMutation.mutate({
+                         tableId,
+                         rowId: editingCell.rowId,
+                         columnId: editingCell.columnId,
+                         value: formattedValue,
+                       });
+                       setEditingCell(null);
+                       setSelectedCell({ rowId: editingCell.rowId, columnId: editingCell.columnId });
                      }
                    }}
                    className="w-full h-full bg-transparent border-none outline-none focus:ring-0 pointer-events-auto text-[13px]"
@@ -1205,13 +1341,93 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
             ))}
           
           {/* Add column button */}
-          <div className="border border-gray-200 bg-gray-50 h-9 flex items-center justify-center" style={{ width: '32px', minWidth: '32px', maxWidth: '32px' }}>
+          <div className="relative border border-gray-200 bg-gray-50 h-9 flex items-center justify-center" style={{ width: '32px', minWidth: '32px', maxWidth: '32px' }}>
             <button
-              onClick={() => void addColumnMutation.mutate({ tableId })}
+              onClick={handleOpenNewColumnDropdown}
               className="w-full h-full px-2 py-1 text-gray-500 hover:text-gray-700 hover:bg-gray-100 text-xs"
             >
               +
             </button>
+            
+            {/* New Column Dropdown */}
+            {showNewColumnDropdown && (
+              <>
+                <div className="absolute right-0 top-full mt-1 w-64 bg-white border border-gray-200 rounded-md shadow-lg z-50">
+                  <div className="p-2">
+                    {!newColumnType ? (
+                      // Initial state - show type selection
+                      <>
+                        {/* Header */}
+                        <div className="text-center mb-2">
+                          <h3 className="text-sm font-medium text-gray-900">Create a field</h3>
+                        </div>
+
+                        {/* Field Type Selection */}
+                        <div className="space-y-1">
+                          <button
+                            onClick={() => handleSelectColumnType('text')}
+                            className="w-full flex items-center space-x-2 p-2 text-left hover:bg-gray-50 rounded text-sm"
+                          >
+                            <span className="text-xs text-gray-400">A</span>
+                            <span>Text</span>
+                          </button>
+                          
+                          <button
+                            onClick={() => handleSelectColumnType('number')}
+                            className="w-full flex items-center space-x-2 p-2 text-left hover:bg-gray-50 rounded text-sm"
+                          >
+                            <span className="text-xs text-gray-400">#</span>
+                            <span>Number</span>
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      // After selecting type - show field name input and buttons
+                      <>
+                        <div className="mb-3 px-1 pt-1">
+                          <input
+                            type="text"
+                            value={newColumnName}
+                            onChange={(e) => setNewColumnName(e.target.value)}
+                            onKeyDown={handleNewColumnKeyDown}
+                            placeholder="Field name (optional)"
+                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                            autoFocus
+                          />
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex justify-end space-x-2 px-1">
+                          <button
+                            onClick={handleCloseNewColumnDropdown}
+                            className="px-3 py-1 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={handleCreateColumn}
+                            disabled={addColumnMutation.isPending}
+                            className="px-3 py-1 text-xs font-medium text-white bg-blue-600 border border-transparent rounded hover:bg-blue-700 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {addColumnMutation.isPending ? 'Creating...' : 'Create field'}
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+                
+                {/* Click outside to close dropdown */}
+                <div 
+                  className="fixed inset-0 z-40" 
+                  onClick={() => {
+                    setShowNewColumnDropdown(false);
+                    setNewColumnType(null);
+                    setNewColumnName('');
+                  }}
+                />
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -1326,39 +1542,91 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                                  type="text"
                                  defaultValue={editingCell?.value ?? ""}
                                  onChange={(e) => {
-                                   currentValueRef.current = e.target.value;
-                                 }}
-                                 onBlur={() => {
-                                   if (editingCell) {
-                                     const finalValue = currentValueRef.current;
-                                     const cellKey = `${editingCell.rowId}-${editingCell.columnId}`;
-                                     setLocalCellValues(prev => ({ ...prev, [cellKey]: finalValue }));
-                                     
-                                     void updateCellMutation.mutate({
-                                       tableId,
-                                       rowId: editingCell.rowId,
-                                       columnId: editingCell.columnId,
-                                       value: finalValue,
-                                     });
-                                     setEditingCell(null);
-                                     setSelectedCell({ rowId: editingCell.rowId, columnId: editingCell.columnId }); // Select the cell after editing
+                                   const value = e.target.value;
+                                   const columnType = getColumnType(column.id);
+                                   
+                                   // For number columns, only allow valid number input
+                                   if (columnType === 'number') {
+                                     if (value === '' || isValidNumberInput(value)) {
+                                       currentValueRef.current = value;
+                                     } else {
+                                       // Prevent invalid input by not updating the value
+                                       e.target.value = currentValueRef.current;
+                                       return;
+                                     }
+                                   } else {
+                                     currentValueRef.current = value;
                                    }
                                  }}
                                  onKeyDown={(e) => {
+                                   const columnType = getColumnType(column.id);
+                                   
+                                   // For number columns, prevent non-numeric input
+                                   if (columnType === 'number') {
+                                     // Allow: backspace, delete, tab, escape, enter, and arrow keys
+                                     if ([8, 9, 27, 13, 37, 38, 39, 40, 46].includes(e.keyCode)) {
+                                       // Handle Enter key
+                                       if (e.keyCode === 13) {
+                                         e.preventDefault();
+                                         e.stopPropagation();
+                                         
+                                         if (editingCell) {
+                                           const finalValue = currentValueRef.current;
+                                           const columnType = getColumnType(editingCell.columnId);
+                                           const formattedValue = columnType === 'number' ? formatNumberInput(finalValue) : finalValue;
+                                           const cellKey = `${editingCell.rowId}-${editingCell.columnId}`;
+                                           setLocalCellValues(prev => ({ ...prev, [cellKey]: formattedValue }));
+                                           
+                                           void updateCellMutation.mutate({
+                                             tableId,
+                                             rowId: editingCell.rowId,
+                                             columnId: editingCell.columnId,
+                                             value: formattedValue,
+                                           });
+                                           setEditingCell(null);
+                                           
+                                           // Move selection to the row below (same column)
+                                           const rowIndex = allRows.findIndex(r => r.id === editingCell.rowId);
+                                           const nextRow = allRows[rowIndex + 1];
+                                           if (nextRow) {
+                                             setSelectedCell({
+                                               rowId: nextRow.id,
+                                               columnId: editingCell.columnId,
+                                             });
+                                           } else {
+                                             setSelectedCell({ rowId: editingCell.rowId, columnId: editingCell.columnId });
+                                           }
+                                         }
+                                       }
+                                       return;
+                                     }
+                                     // Allow: Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X, Ctrl+Z
+                                     if ((e.ctrlKey || e.metaKey) && [65, 67, 86, 88, 90].includes(e.keyCode)) {
+                                       return;
+                                     }
+                                     // Allow: numbers, decimal point, minus sign
+                                     if (!/[0-9.-]/.test(e.key)) {
+                                       e.preventDefault();
+                                       return;
+                                     }
+                                   }
+                                   
                                    if (e.key === "Enter") {
                                      e.preventDefault();
-                                     e.stopPropagation(); // Prevent global keydown handler from firing
+                                     e.stopPropagation();
                                      
                                      if (editingCell) {
                                        const finalValue = currentValueRef.current;
+                                       const columnType = getColumnType(editingCell.columnId);
+                                       const formattedValue = columnType === 'number' ? formatNumberInput(finalValue) : finalValue;
                                        const cellKey = `${editingCell.rowId}-${editingCell.columnId}`;
-                                       setLocalCellValues(prev => ({ ...prev, [cellKey]: finalValue }));
+                                       setLocalCellValues(prev => ({ ...prev, [cellKey]: formattedValue }));
                                        
                                        void updateCellMutation.mutate({
                                          tableId,
                                          rowId: editingCell.rowId,
                                          columnId: editingCell.columnId,
-                                         value: finalValue,
+                                         value: formattedValue,
                                        });
                                        setEditingCell(null);
                                        
@@ -1371,14 +1639,31 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                                            columnId: editingCell.columnId,
                                          });
                                        } else {
-                                         // If no row below, keep same cell selected
                                          setSelectedCell({ rowId: editingCell.rowId, columnId: editingCell.columnId });
                                        }
                                      }
                                    } else if (e.key === "Escape") {
-                                     e.stopPropagation(); // Also good practice
+                                     e.stopPropagation();
                                      setEditingCell(null);
-                                     setSelectedCell({ rowId: editingCell?.rowId ?? '', columnId: editingCell?.columnId ?? '' }); // Select the cell after canceling
+                                     setSelectedCell({ rowId: editingCell?.rowId ?? '', columnId: editingCell?.columnId ?? '' });
+                                   }
+                                 }}
+                                 onBlur={() => {
+                                   if (editingCell) {
+                                     const finalValue = currentValueRef.current;
+                                     const columnType = getColumnType(editingCell.columnId);
+                                     const formattedValue = columnType === 'number' ? formatNumberInput(finalValue) : finalValue;
+                                     const cellKey = `${editingCell.rowId}-${editingCell.columnId}`;
+                                     setLocalCellValues(prev => ({ ...prev, [cellKey]: formattedValue }));
+                                     
+                                     void updateCellMutation.mutate({
+                                       tableId,
+                                       rowId: editingCell.rowId,
+                                       columnId: editingCell.columnId,
+                                       value: formattedValue,
+                                     });
+                                     setEditingCell(null);
+                                     setSelectedCell({ rowId: editingCell.rowId, columnId: editingCell.columnId });
                                    }
                                  }}
                                  className="w-full h-full bg-transparent border-none outline-none focus:ring-0 pointer-events-auto text-[13px]"
@@ -1406,20 +1691,33 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
        
        {/* Add row button */}
        <div 
-         className="border border-gray-200 border-t-0 bg-[#ffffff] h-9 flex items-center justify-center"
+         className="border border-gray-200 border-t-0 bg-[#ffffff] h-9 flex items-center hover:bg-gray-100 cursor-pointer transition-colors"
                    style={{ width: `${80 + (tableMeta?.columns?.filter(col => !isFieldHidden(col.id)).length ?? 0) * 192}px` }}
+         onClick={() => {
+           if (!tableId) return;
+           void addRowMutation.mutate({ tableId });
+         }}
        >
-         <button
-           onClick={() => {
-             if (!tableId) return;
-             void addRowMutation.mutate({ tableId });
-           }}
-           disabled={addRowMutation.isPending}
-           className="px-3 py-1 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-           title="Add a new row"
-         >
-           {addRowMutation.isPending ? "Adding..." : "+"}
-         </button>
+         {addRowMutation.isPending ? (
+           /* Centered "Adding..." text when loading */
+           <div className="flex items-center justify-center w-full h-full">
+             <span className="text-gray-500 text-sm">
+               Adding...
+             </span>
+           </div>
+         ) : (
+           <>
+             {/* Row number area with + button */}
+             <div className="flex items-center justify-center w-20 h-full">
+               <span className="text-gray-500 text-sm">
+                 +
+               </span>
+             </div>
+             
+             {/* Empty space for data columns */}
+             <div className="flex-1 h-full"></div>
+           </>
+         )}
        </div>
        
                                {/* Status bar removed - no longer showing to users */}
@@ -1472,6 +1770,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
           </button>
         </div>
       )}
+
      </div>
    );
  }

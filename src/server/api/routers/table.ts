@@ -478,17 +478,30 @@ export const tableRouter = createTRPCRouter({
             const aValue = aCell?.value ?? "";
             const bValue = bCell?.value ?? "";
             
-            // Handle numeric values (remove $ and commas for salary)
-            const aNumeric = parseFloat(aValue.replace(/[$,]/g, ""));
-            const bNumeric = parseFloat(bValue.replace(/[$,]/g, ""));
+            // Check if this is a number column
+            const column = table.columns.find(col => col.id === sortRule.columnId);
+            const isNumberColumn = column?.type === 'number';
             
-            if (!isNaN(aNumeric) && !isNaN(bNumeric)) {
-              // Numeric comparison
-              if (aNumeric !== bNumeric) {
-                return sortRule.direction === "asc" ? aNumeric - bNumeric : bNumeric - aNumeric;
+            if (isNumberColumn) {
+              // For number columns, treat empty cells as less than 0
+              const aNumeric = aValue === "" ? -1 : parseFloat(aValue);
+              const bNumeric = bValue === "" ? -1 : parseFloat(bValue);
+              
+              if (!isNaN(aNumeric) && !isNaN(bNumeric)) {
+                // Numeric comparison
+                if (aNumeric !== bNumeric) {
+                  return sortRule.direction === "asc" ? aNumeric - bNumeric : bNumeric - aNumeric;
+                }
+              } else {
+                // If one is NaN, treat it as less than valid numbers
+                const aValid = !isNaN(aNumeric);
+                const bValid = !isNaN(bNumeric);
+                if (aValid !== bValid) {
+                  return sortRule.direction === "asc" ? (aValid ? 1 : -1) : (aValid ? -1 : 1);
+                }
               }
             } else {
-              // String comparison
+              // For text columns, use string comparison
               const comparison = aValue.localeCompare(bValue);
               if (comparison !== 0) {
                 return sortRule.direction === "asc" ? comparison : -comparison;
@@ -789,7 +802,8 @@ export const tableRouter = createTRPCRouter({
   addColumn: protectedProcedure
     .input(z.object({ 
       tableId: z.string(),
-      name: z.string().optional() // Optional custom name
+      name: z.string().optional(), // Optional custom name
+      type: z.enum(['text', 'number']).default('text') // Column type with default
     }))
     .mutation(async ({ ctx, input }) => {
       // Verify user owns the table
@@ -813,6 +827,7 @@ export const tableRouter = createTRPCRouter({
         data: {
           tableId: input.tableId,
           name: input.name ?? `Column ${columnCount + 1}`, // Use custom name or default
+          type: input.type,
           order: columnCount
         }
       });
@@ -1353,12 +1368,26 @@ export const tableRouter = createTRPCRouter({
             ON ${alias}."rowId" = tr.id AND ${alias}."columnId" = ${s.columnId}
         `);
         const dir = Prisma.raw(s.direction.toUpperCase());
-        const numExpr = Prisma.sql`NULLIF(regexp_replace(COALESCE(${alias}.value, ''), '[^0-9\\.\\-]', '', 'g'), '')`;
-        const isNum = Prisma.sql`(COALESCE(${numExpr}, '') ~ '^-?\\d+(\\.\\d+)?$')`;
-        const safeNum = Prisma.sql`CASE WHEN ${isNum} THEN (${numExpr})::numeric ELSE NULL END`;
-        orderParts.push(Prisma.sql`${isNum} DESC`);
-        orderParts.push(Prisma.sql`${safeNum} ${dir} NULLS LAST`);
-        orderParts.push(Prisma.sql`LOWER(COALESCE(${alias}.value, '')) ${dir}`);
+        
+        // Check if this is a number column
+        const column = table.columns.find(col => col.id === s.columnId);
+        const isNumberColumn = column?.type === 'number';
+        
+        if (isNumberColumn) {
+          // For number columns, treat empty cells as less than 0
+          const numExpr = Prisma.sql`NULLIF(regexp_replace(COALESCE(${alias}.value, ''), '[^0-9\\.\\-]', '', 'g'), '')`;
+          const isNum = Prisma.sql`(COALESCE(${numExpr}, '') ~ '^-?\\d+(\\.\\d+)?$')`;
+          const safeNum = Prisma.sql`CASE WHEN ${isNum} THEN (${numExpr})::numeric ELSE -1 END`;
+          orderParts.push(Prisma.sql`${safeNum} ${dir}`);
+        } else {
+          // For text columns, use the original logic
+          const numExpr = Prisma.sql`NULLIF(regexp_replace(COALESCE(${alias}.value, ''), '[^0-9\\.\\-]', '', 'g'), '')`;
+          const isNum = Prisma.sql`(COALESCE(${numExpr}, '') ~ '^-?\\d+(\\.\\d+)?$')`;
+          const safeNum = Prisma.sql`CASE WHEN ${isNum} THEN (${numExpr})::numeric ELSE NULL END`;
+          orderParts.push(Prisma.sql`${isNum} DESC`);
+          orderParts.push(Prisma.sql`${safeNum} ${dir} NULLS LAST`);
+          orderParts.push(Prisma.sql`LOWER(COALESCE(${alias}.value, '')) ${dir}`);
+        }
       });
       orderParts.push(Prisma.sql`tr.order ASC`);
       // Ensure globally stable ordering across pages (unique final tiebreaker)
