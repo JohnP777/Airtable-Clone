@@ -216,6 +216,65 @@ export function FilterSortButtons() {
     // Note: The UI will update immediately via context, server will sync in background
   };
 
+  // Helper function to get filter button text and styling
+  const getFilterButtonState = () => {
+    // Only show "Filtered by X" if there are filter rules with actual values
+    const activeFilterRules = filterRules.filter(rule => {
+      // Filter out rules with empty values (unless they're "is empty" or "is not empty" operators)
+      if (rule.operator === "is empty" || rule.operator === "is not empty") {
+        return true; // These operators don't need a value
+      }
+      return rule.value && rule.value.trim() !== "";
+    });
+    
+    if (activeFilterRules.length > 0) {
+      const columnNames = activeFilterRules.map(rule => {
+        const column = tableMeta?.columns.find((c: any) => c.id === rule.columnId);
+        return column?.name || 'Unknown Column';
+      });
+      
+      const text = columnNames.length === 1 
+        ? `Filtered by ${columnNames[0]}`
+        : `Filtered by ${columnNames.slice(0, -1).join(', ')} and ${columnNames[columnNames.length - 1]}`;
+      
+      return {
+        text,
+        className: 'flex items-center space-x-1 px-2 py-1 text-xs text-gray-700 bg-green-50 hover:bg-green-100 rounded border border-green-200'
+      };
+    }
+    
+    return {
+      text: 'Filter',
+      className: 'flex items-center space-x-1 px-3 py-1 text-xs text-gray-500 hover:bg-gray-50 rounded disabled:opacity-50 disabled:cursor-not-allowed'
+    };
+  };
+
+  // Helper function to get sort button text and styling
+  const getSortButtonState = () => {
+    if (isSorting) {
+      return {
+        text: 'Sorting...',
+        className: 'flex items-center space-x-1 px-3 py-1 text-xs text-gray-500 hover:bg-gray-50 rounded disabled:opacity-50 disabled:cursor-not-allowed'
+      };
+    }
+    
+    if (sortRules.length > 0) {
+      const text = sortRules.length === 1 
+        ? 'Sorted by 1 field'
+        : `Sorted by ${sortRules.length} fields`;
+      
+      return {
+        text,
+        className: 'flex items-center space-x-1 px-2 py-1 text-xs text-gray-700 bg-orange-50 hover:bg-orange-100 rounded border border-orange-200'
+      };
+    }
+    
+    return {
+      text: 'Sort',
+      className: 'flex items-center space-x-1 px-3 py-1 text-xs text-gray-500 hover:bg-gray-50 rounded disabled:opacity-50 disabled:cursor-not-allowed'
+    };
+  };
+
   return (
     <div className="flex items-center space-x-2 relative">
       <div className="-mr-0">
@@ -227,13 +286,13 @@ export function FilterSortButtons() {
         <button
           onClick={handleFilter}
           disabled={isFiltering}
-          className="flex items-center space-x-1 px-3 py-1 text-xs text-gray-500 hover:bg-gray-50 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+          className={getFilterButtonState().className}
         >
           <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
             <path d="M3 5h18M6 12h12M10 19h4" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
           <span className="font-normal" style={{ fontFamily: 'Mundo Sans Regular, sans-serif' }}>
-            {isFiltering ? 'Filtering...' : 'Filter'}
+            {getFilterButtonState().text}
           </span>
         </button>
         
@@ -388,11 +447,11 @@ export function FilterSortButtons() {
         <button
           onClick={handleSort}
           disabled={isSorting}
-          className="flex items-center space-x-1 px-3 py-1 text-xs text-gray-500 hover:bg-gray-50 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+          className={getSortButtonState().className}
         >
           <img src="/20.PNG" alt="Sort" className="h-4 w-4" />
           <span className="font-normal" style={{ fontFamily: 'Mundo Sans Regular, sans-serif' }}>
-            {isSorting ? 'Sorting...' : 'Sort'}
+            {getSortButtonState().text}
           </span>
         </button>
         
