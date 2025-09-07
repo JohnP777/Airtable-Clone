@@ -314,7 +314,8 @@ export const tableRouter = createTRPCRouter({
         filterRules: view.filterRules.map(r => ({
           columnId: r.columnId,
           operator: r.operator as
-            | "contains" | "does not contain" | "is" | "is not" | "is empty" | "is not empty",
+            | "contains" | "does not contain" | "is" | "is not" | "is empty" | "is not empty"
+            | "equals" | "not equals" | "less than" | "greater than" | "less than or equal" | "greater than or equal",
           value: r.value,
           logicalOperator: (r as any).logicalOperator as "AND" | "OR" | undefined,
         })),
@@ -327,7 +328,7 @@ export const tableRouter = createTRPCRouter({
       viewId: z.string(),
       rules: z.array(z.object({
         columnId: z.string(),
-        operator: z.enum(["contains","does not contain","is","is not","is empty","is not empty"]),
+        operator: z.enum(["contains","does not contain","is","is not","is empty","is not empty","equals","not equals","less than","greater than","less than or equal","greater than or equal"]),
         value: z.string(),
         logicalOperator: z.enum(["AND", "OR"]).nullable().optional(),
       })),
@@ -446,6 +447,10 @@ export const tableRouter = createTRPCRouter({
           if (f.operator === "is empty" || f.operator === "is not empty") {
             return true; // These operators don't need values
           }
+          // For numeric operators, check if the value is a valid number
+          if (["equals", "not equals", "less than", "greater than", "less than or equal", "greater than or equal"].includes(f.operator)) {
+            return f.value && f.value.trim() !== "" && !isNaN(Number(f.value));
+          }
           return f.value && f.value.trim() !== ""; // Only include filters with non-empty values
         });
 
@@ -477,6 +482,24 @@ export const tableRouter = createTRPCRouter({
                   break;
                 case "is not empty":
                   condition = cellValue !== "" && cellValue !== null && cellValue !== undefined;
+                  break;
+                case "equals":
+                  condition = Number(cellValue) === Number(filterRule.value);
+                  break;
+                case "not equals":
+                  condition = Number(cellValue) !== Number(filterRule.value);
+                  break;
+                case "less than":
+                  condition = Number(cellValue) < Number(filterRule.value);
+                  break;
+                case "greater than":
+                  condition = Number(cellValue) > Number(filterRule.value);
+                  break;
+                case "less than or equal":
+                  condition = Number(cellValue) <= Number(filterRule.value);
+                  break;
+                case "greater than or equal":
+                  condition = Number(cellValue) >= Number(filterRule.value);
                   break;
                 default:
                   condition = true;
@@ -1251,7 +1274,8 @@ export const tableRouter = createTRPCRouter({
         operator: z.enum([
           "contains", "does not contain",
           "is", "is not",
-          "is empty", "is not empty"
+          "is empty", "is not empty",
+          "equals", "not equals", "less than", "greater than", "less than or equal", "greater than or equal"
         ]),
         value: z.string().default(""),
         logicalOperator: z.enum(["AND", "OR"]).nullable().optional()
@@ -1314,6 +1338,10 @@ export const tableRouter = createTRPCRouter({
           if (f.operator === "is empty" || f.operator === "is not empty") {
             return true; // These operators don't need values
           }
+          // For numeric operators, check if the value is a valid number
+          if (["equals", "not equals", "less than", "greater than", "less than or equal", "greater than or equal"].includes(f.operator)) {
+            return f.value && f.value.trim() !== "" && !isNaN(Number(f.value));
+          }
           return f.value && f.value.trim() !== ""; // Only include filters with non-empty values
         });
 
@@ -1352,6 +1380,24 @@ export const tableRouter = createTRPCRouter({
                 break;
               case "is not empty":
                 condition = Prisma.sql`${alias}.value IS NOT NULL AND ${alias}.value <> ''`;
+                break;
+              case "equals":
+                condition = Prisma.sql`${alias}.value IS NOT NULL AND ${alias}.value != '' AND ${alias}.value::numeric = ${f.value}::numeric`;
+                break;
+              case "not equals":
+                condition = Prisma.sql`${alias}.value IS NOT NULL AND ${alias}.value != '' AND ${alias}.value::numeric <> ${f.value}::numeric`;
+                break;
+              case "less than":
+                condition = Prisma.sql`${alias}.value IS NOT NULL AND ${alias}.value != '' AND ${alias}.value::numeric < ${f.value}::numeric`;
+                break;
+              case "greater than":
+                condition = Prisma.sql`${alias}.value IS NOT NULL AND ${alias}.value != '' AND ${alias}.value::numeric > ${f.value}::numeric`;
+                break;
+              case "less than or equal":
+                condition = Prisma.sql`${alias}.value IS NOT NULL AND ${alias}.value != '' AND ${alias}.value::numeric <= ${f.value}::numeric`;
+                break;
+              case "greater than or equal":
+                condition = Prisma.sql`${alias}.value IS NOT NULL AND ${alias}.value != '' AND ${alias}.value::numeric >= ${f.value}::numeric`;
                 break;
               default:
                 condition = Prisma.sql`TRUE`;

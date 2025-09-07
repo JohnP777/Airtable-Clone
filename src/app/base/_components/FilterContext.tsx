@@ -7,9 +7,9 @@ import { api } from "../../../trpc/react";
 
 export type FilterRule = {
   columnId: string;
-  operator: "contains" | "does not contain" | "is" | "is not" | "is empty" | "is not empty";
+  operator: "contains" | "does not contain" | "is" | "is not" | "is empty" | "is not empty" | "equals" | "not equals" | "less than" | "greater than" | "less than or equal" | "greater than or equal";
   value: string;
-  logicalOperator?: "AND" | "OR"; // Added for And/Or functionality
+  logicalOperator?: "AND" | "OR" | null; // Added for And/Or functionality
 };
 
 type Ctx = {

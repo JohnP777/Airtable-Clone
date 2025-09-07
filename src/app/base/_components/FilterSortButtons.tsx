@@ -17,9 +17,9 @@ interface SortRule {
 
 interface FilterRule {
   columnId: string;
-  operator: "contains" | "does not contain" | "is" | "is not" | "is empty" | "is not empty";
+  operator: "contains" | "does not contain" | "is" | "is not" | "is empty" | "is not empty" | "equals" | "not equals" | "less than" | "greater than" | "less than or equal" | "greater than or equal";
   value: string;
-  logicalOperator?: "AND" | "OR"; // Added for And/Or functionality
+  logicalOperator?: "AND" | "OR" | null; // Added for And/Or functionality
 }
 
 export function FilterSortButtons() {
@@ -224,6 +224,10 @@ export function FilterSortButtons() {
       if (rule.operator === "is empty" || rule.operator === "is not empty") {
         return true; // These operators don't need a value
       }
+      // For numeric operators, check if the value is a valid number
+      if (["equals", "not equals", "less than", "greater than", "less than or equal", "greater than or equal"].includes(rule.operator)) {
+        return rule.value && rule.value.trim() !== "" && !isNaN(Number(rule.value));
+      }
       return rule.value && rule.value.trim() !== "";
     });
     
@@ -247,6 +251,34 @@ export function FilterSortButtons() {
       text: 'Filter',
       className: 'flex items-center space-x-1 px-3 py-1 text-xs text-gray-500 hover:bg-gray-50 rounded disabled:opacity-50 disabled:cursor-not-allowed'
     };
+  };
+
+  // Helper function to get operators based on column type
+  const getOperatorsForColumn = (columnId: string) => {
+    const column = tableMeta?.columns.find((c: any) => c.id === columnId);
+    const columnType = column?.type;
+    
+    if (columnType === 'number') {
+      return [
+        { value: "equals", label: "=" },
+        { value: "not equals", label: "≠" },
+        { value: "less than", label: "<" },
+        { value: "greater than", label: ">" },
+        { value: "less than or equal", label: "≤" },
+        { value: "greater than or equal", label: "≥" },
+        { value: "is empty", label: "is empty" },
+        { value: "is not empty", label: "is not empty" }
+      ];
+    } else {
+      return [
+        { value: "contains", label: "contains" },
+        { value: "does not contain", label: "does not contain" },
+        { value: "is", label: "is" },
+        { value: "is not", label: "is not" },
+        { value: "is empty", label: "is empty" },
+        { value: "is not empty", label: "is not empty" }
+      ];
+    }
   };
 
   // Helper function to get sort button text and styling
@@ -375,12 +407,11 @@ export function FilterSortButtons() {
                             value={rule.operator}
                             onChange={(e) => handleUpdateFilterRule(rule.columnId, "operator", e.target.value)}
                           >
-                            <option value="contains">contains</option>
-                            <option value="does not contain">does not contain</option>
-                            <option value="is">is</option>
-                            <option value="is not">is not</option>
-                            <option value="is empty">is empty</option>
-                            <option value="is not empty">is not empty</option>
+                            {getOperatorsForColumn(rule.columnId).map(operator => (
+                              <option key={operator.value} value={operator.value}>
+                                {operator.label}
+                              </option>
+                            ))}
                           </select>
                           <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
                             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
