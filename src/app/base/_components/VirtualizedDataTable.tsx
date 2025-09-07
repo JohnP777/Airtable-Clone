@@ -792,9 +792,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
           columnId: selectedCell.columnId,
           value: e.key // Start with the typed character
         });
-        
-        // Set the current value ref for the input
-        currentValueRef.current = e.key;
+        currentValueRef.current = e.key; // Reset the ref to the typed character
         return;
       }
 
@@ -815,6 +813,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
           columnId: selectedCell.columnId,
           value: cellValue
         });
+        currentValueRef.current = cellValue; // Reset the ref to the cell value
         return;
       }
 
@@ -1141,11 +1140,13 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                  setEditingCell(null); // Clear editing state when clicking elsewhere
                }}
                onDoubleClick={() => {
+                 const cellValue = localCellValues[`${cellData.rowId}-${cellData.columnId}`] ?? cellData.value;
                  setEditingCell({
                    rowId: cellData.rowId,
                    columnId: cellData.columnId,
-                   value: localCellValues[`${cellData.rowId}-${cellData.columnId}`] ?? cellData.value,
+                   value: cellValue,
                  });
+                 currentValueRef.current = cellValue; // Reset the ref to the cell value
                }}
              >
                {isEditing ? (
@@ -1668,11 +1669,13 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                                  setEditingCell(null); // Clear editing state when clicking elsewhere
                                }}
                              onDoubleClick={() => {
+                               const currentCellValue = localCellValues[`${row.id}-${column.id}`] ?? (cell?.value ?? '');
                                setEditingCell({
                                  rowId: row.id,
                                  columnId: column.id,
-                                 value: localCellValues[`${row.id}-${column.id}`] ?? cellValue,
+                                 value: currentCellValue,
                                });
+                               currentValueRef.current = currentCellValue; // Reset the ref to the cell value
                              }}
                            >
                              {isEditing ? (
