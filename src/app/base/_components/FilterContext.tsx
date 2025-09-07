@@ -9,6 +9,7 @@ export type FilterRule = {
   columnId: string;
   operator: "contains" | "does not contain" | "is" | "is not" | "is empty" | "is not empty";
   value: string;
+  logicalOperator?: "AND" | "OR"; // Added for And/Or functionality
 };
 
 type Ctx = {
@@ -45,6 +46,8 @@ export function FilterProvider({ children }: FilterProviderProps) {
     { 
       enabled: hasView, // fetch persisted state only when we have a real viewId
       retry: false, // don't retry if it fails
+      staleTime: 5 * 60 * 1000, // 5 minutes - view state doesn't change often
+      refetchOnWindowFocus: false, // don't refetch on window focus
     }
   );
   const setRulesMutation = api.table.setFilterRules.useMutation({
@@ -61,14 +64,12 @@ export function FilterProvider({ children }: FilterProviderProps) {
         setByView(prev => ({ ...prev, [viewId]: context.previousRules }));
       }
     },
-    onSettled: async (_, __, { viewId }) => {
+    onSuccess: async (_, { viewId }) => {
       if (!selectedTableId) return;
-      // Refetch, but don't nuke local rules
-      await utils.table.getTableDataPaginated.refetch({
+      // Only invalidate after successful mutation
+      await utils.table.getTableDataPaginated.invalidate({
         tableId: selectedTableId,
         viewId: viewId ?? undefined,
-        page: 0,
-        pageSize: 1,
       });
     },
   });

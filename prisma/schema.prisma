@@ -175,6 +175,7 @@ model ViewFilterRule {
     columnId  String
     operator  String // e.g. contains | does not contain | is | is not | is empty | is not empty
     value     String
+    logicalOperator String? // "AND" | "OR" - null for first condition
     order     Int
 
     view View @relation(fields: [viewId], references: [id], onDelete: Cascade)

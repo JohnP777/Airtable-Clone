@@ -236,6 +236,7 @@ export const tableRouter = createTRPCRouter({
             columnId: rule.columnId,
             operator: rule.operator,
             value: rule.value,
+            logicalOperator: (rule as any).logicalOperator, // Copy the logical operator
             order: rule.order
           }))
         });
@@ -315,6 +316,7 @@ export const tableRouter = createTRPCRouter({
           operator: r.operator as
             | "contains" | "does not contain" | "is" | "is not" | "is empty" | "is not empty",
           value: r.value,
+          logicalOperator: (r as any).logicalOperator as "AND" | "OR" | undefined,
         })),
       };
     }),
@@ -327,6 +329,7 @@ export const tableRouter = createTRPCRouter({
         columnId: z.string(),
         operator: z.enum(["contains","does not contain","is","is not","is empty","is not empty"]),
         value: z.string(),
+        logicalOperator: z.enum(["AND", "OR"]).nullable().optional(),
       })),
     }))
     .mutation(async ({ ctx, input }) => {
@@ -338,6 +341,7 @@ export const tableRouter = createTRPCRouter({
             columnId: r.columnId,
             operator: r.operator,
             value: r.value,
+            logicalOperator: r.logicalOperator,
             order: i,
           })),
         }),
@@ -391,7 +395,8 @@ export const tableRouter = createTRPCRouter({
       filterRules: z.array(z.object({
         columnId: z.string(),
         operator: z.string(),
-        value: z.string()
+        value: z.string(),
+        logicalOperator: z.enum(["AND", "OR"]).nullable().optional()
       })).optional()
     }))
     .query(async ({ ctx, input }) => {
@@ -436,29 +441,64 @@ export const tableRouter = createTRPCRouter({
 
       // Apply filtering if filter rules are provided
       if (input.filterRules && input.filterRules.length > 0) {
-        filteredRows = filteredRows.filter(row => {
-          return input.filterRules!.every(filterRule => {
-            const cell = row.cells.find(cell => cell.columnId === filterRule.columnId);
-            const cellValue = cell?.value ?? "";
-            
-            switch (filterRule.operator) {
-              case "contains":
-                return cellValue.toLowerCase().includes(filterRule.value.toLowerCase());
-              case "does not contain":
-                return !cellValue.toLowerCase().includes(filterRule.value.toLowerCase());
-              case "is":
-                return cellValue.toLowerCase() === filterRule.value.toLowerCase();
-              case "is not":
-                return cellValue.toLowerCase() !== filterRule.value.toLowerCase();
-              case "is empty":
-                return cellValue === "" || cellValue === null || cellValue === undefined;
-              case "is not empty":
-                return cellValue !== "" && cellValue !== null && cellValue !== undefined;
-              default:
-                return true;
-            }
-          });
+        // Filter out rules with empty values (except for "is empty" and "is not empty" operators)
+        const validFilters = input.filterRules.filter(f => {
+          if (f.operator === "is empty" || f.operator === "is not empty") {
+            return true; // These operators don't need values
+          }
+          return f.value && f.value.trim() !== ""; // Only include filters with non-empty values
         });
+
+        if (validFilters.length > 0) {
+          filteredRows = filteredRows.filter(row => {
+            // Process filters with proper AND/OR logic
+            let result = true;
+            
+            validFilters.forEach((filterRule, idx) => {
+              const cell = row.cells.find(cell => cell.columnId === filterRule.columnId);
+              const cellValue = cell?.value ?? "";
+              
+              let condition: boolean;
+              switch (filterRule.operator) {
+                case "contains":
+                  condition = cellValue.toLowerCase().includes(filterRule.value.toLowerCase());
+                  break;
+                case "does not contain":
+                  condition = !cellValue.toLowerCase().includes(filterRule.value.toLowerCase());
+                  break;
+                case "is":
+                  condition = cellValue.toLowerCase() === filterRule.value.toLowerCase();
+                  break;
+                case "is not":
+                  condition = cellValue.toLowerCase() !== filterRule.value.toLowerCase();
+                  break;
+                case "is empty":
+                  condition = cellValue === "" || cellValue === null || cellValue === undefined;
+                  break;
+                case "is not empty":
+                  condition = cellValue !== "" && cellValue !== null && cellValue !== undefined;
+                  break;
+                default:
+                  condition = true;
+              }
+
+              if (idx === 0) {
+                // First condition - set the initial result
+                result = condition;
+              } else {
+                // Subsequent conditions - apply the logical operator (default to AND if null)
+                const logicalOp = filterRule.logicalOperator || "AND";
+                if (logicalOp === "AND") {
+                  result = result && condition;
+                } else {
+                  result = result || condition;
+                }
+              }
+            });
+
+            return result;
+          });
+        }
       }
 
       // Apply sorting if sort rules are provided
@@ -1213,7 +1253,8 @@ export const tableRouter = createTRPCRouter({
           "is", "is not",
           "is empty", "is not empty"
         ]),
-        value: z.string().default("")
+        value: z.string().default(""),
+        logicalOperator: z.enum(["AND", "OR"]).nullable().optional()
       })).optional()
     }))
     .query(async ({ ctx, input }) => {
@@ -1258,7 +1299,7 @@ export const tableRouter = createTRPCRouter({
             effectiveSort = view.sortRules.map(r => ({ columnId: r.columnId, direction: r.direction as "asc" | "desc" }));
           }
           if (!effectiveFilter.length && view.filterRules?.length) {
-            effectiveFilter = view.filterRules.map(r => ({ columnId: r.columnId, operator: r.operator as any, value: r.value ?? "" }));
+            effectiveFilter = view.filterRules.map(r => ({ columnId: r.columnId, operator: r.operator as any, value: r.value ?? "", logicalOperator: (r as any).logicalOperator as "AND" | "OR" | undefined }));
           }
         }
       }
@@ -1266,35 +1307,76 @@ export const tableRouter = createTRPCRouter({
       const joins: Prisma.Sql[] = [];
       const whereParts: Prisma.Sql[] = [Prisma.sql`tr."tableId" = ${input.tableId}`];
 
-      effectiveFilter.forEach((f, idx) => {
-        const alias = Prisma.raw(`f${idx}`);
-        joins.push(Prisma.sql`
-          LEFT JOIN "TableCell" ${alias}
-            ON ${alias}."rowId" = tr.id AND ${alias}."columnId" = ${f.columnId}
-        `);
-        const v = (f.value ?? "").toLowerCase();
-        const like = `%${v}%`;
-        switch (f.operator) {
-          case "contains":
-            whereParts.push(Prisma.sql`LOWER(COALESCE(${alias}.value, '')) LIKE ${like}`);
-            break;
-          case "does not contain":
-            whereParts.push(Prisma.sql`(LOWER(COALESCE(${alias}.value, '')) NOT LIKE ${like})`);
-            break;
-          case "is":
-            whereParts.push(Prisma.sql`LOWER(COALESCE(${alias}.value, '')) = ${v}`);
-            break;
-          case "is not":
-            whereParts.push(Prisma.sql`LOWER(COALESCE(${alias}.value, '')) <> ${v}`);
-            break;
-          case "is empty":
-            whereParts.push(Prisma.sql`${alias}.value IS NULL OR ${alias}.value = ''`);
-            break;
-          case "is not empty":
-            whereParts.push(Prisma.sql`${alias}.value IS NOT NULL AND ${alias}.value <> ''`);
-            break;
+      // Process filters with proper AND/OR logic
+      if (effectiveFilter.length > 0) {
+        // Filter out rules with empty values (except for "is empty" and "is not empty" operators)
+        const validFilters = effectiveFilter.filter(f => {
+          if (f.operator === "is empty" || f.operator === "is not empty") {
+            return true; // These operators don't need values
+          }
+          return f.value && f.value.trim() !== ""; // Only include filters with non-empty values
+        });
+
+        if (validFilters.length === 0) {
+          // No valid filters, don't apply any filtering
+        } else {
+          // Build the filter conditions with proper AND/OR logic
+          const conditions: Prisma.Sql[] = [];
+          
+          validFilters.forEach((f, idx) => {
+            const alias = Prisma.raw(`f${idx}`);
+            joins.push(Prisma.sql`
+              LEFT JOIN "TableCell" ${alias}
+                ON ${alias}."rowId" = tr.id AND ${alias}."columnId" = ${f.columnId}
+            `);
+            
+            const v = (f.value ?? "").toLowerCase();
+            const like = `%${v}%`;
+            let condition: Prisma.Sql;
+            
+            switch (f.operator) {
+              case "contains":
+                condition = Prisma.sql`LOWER(COALESCE(${alias}.value, '')) LIKE ${like}`;
+                break;
+              case "does not contain":
+                condition = Prisma.sql`(LOWER(COALESCE(${alias}.value, '')) NOT LIKE ${like})`;
+                break;
+              case "is":
+                condition = Prisma.sql`LOWER(COALESCE(${alias}.value, '')) = ${v}`;
+                break;
+              case "is not":
+                condition = Prisma.sql`LOWER(COALESCE(${alias}.value, '')) <> ${v}`;
+                break;
+              case "is empty":
+                condition = Prisma.sql`${alias}.value IS NULL OR ${alias}.value = ''`;
+                break;
+              case "is not empty":
+                condition = Prisma.sql`${alias}.value IS NOT NULL AND ${alias}.value <> ''`;
+                break;
+              default:
+                condition = Prisma.sql`TRUE`;
+            }
+
+            if (idx === 0) {
+              // First condition - always add it
+              conditions.push(condition);
+            } else {
+              // Subsequent conditions - use the logical operator (default to AND if null)
+              const logicalOp = f.logicalOperator || "AND";
+              if (logicalOp === "AND") {
+                conditions.push(Prisma.sql`AND ${condition}`);
+              } else {
+                conditions.push(Prisma.sql`OR ${condition}`);
+              }
+            }
+          });
+
+          // Join all conditions
+          if (conditions.length > 0) {
+            whereParts.push(Prisma.join(conditions, ' '));
+          }
         }
-      });
+      }
 
       const orderParts: Prisma.Sql[] = [];
       // If no explicit sort, and a view is provided, respect per-view manual order first

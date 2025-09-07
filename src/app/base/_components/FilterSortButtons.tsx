@@ -19,6 +19,7 @@ interface FilterRule {
   columnId: string;
   operator: "contains" | "does not contain" | "is" | "is not" | "is empty" | "is not empty";
   value: string;
+  logicalOperator?: "AND" | "OR"; // Added for And/Or functionality
 }
 
 export function FilterSortButtons() {
@@ -75,7 +76,8 @@ export function FilterSortButtons() {
       const newRule: FilterRule = {
         columnId: availableColumns[0].id,
         operator: "contains",
-        value: ""
+        value: "",
+        logicalOperator: filterRules.length > 0 ? "AND" : undefined // Set AND for subsequent rules
       };
       setFilterRules([...filterRules, newRule]);
       // Note: setFilterRules will handle the server mutation with optimistic updates
@@ -92,6 +94,17 @@ export function FilterSortButtons() {
     const newFilterRules = filterRules.map(rule => 
       rule.columnId === columnId 
         ? { ...rule, [field]: value }
+        : rule
+    );
+    
+    setFilterRules(newFilterRules);
+    // Note: setFilterRules will handle the server mutation with optimistic updates
+  };
+
+  const handleUpdateLogicalOperator = (columnId: string, logicalOperator: "AND" | "OR") => {
+    const newFilterRules = filterRules.map(rule => 
+      rule.columnId === columnId 
+        ? { ...rule, logicalOperator }
         : rule
     );
     
@@ -225,7 +238,7 @@ export function FilterSortButtons() {
         </button>
         
         {showFilterDropdown && (
-          <div className="absolute right-0 top-full mt-1 w-[36rem] bg-white border border-gray-200 rounded-md shadow-lg z-50">
+          <div className="absolute right-0 top-full mt-1 w-[42rem] bg-white border border-gray-200 rounded-md shadow-lg z-50">
             <div className="p-4">
               {/* Header */}
               <div className="flex items-center justify-between mb-3">
@@ -255,9 +268,25 @@ export function FilterSortButtons() {
                   <div>
                     {filterRules.map((rule, index) => (
                       <div key={`${rule.columnId}-${index}`} className="flex items-center space-x-2 mb-3">
-                        <div className="w-12 flex justify-center">
+                        <div className="w-16 flex justify-center">
                           {index === 0 && <span className="text-sm text-gray-500">Where</span>}
-                          {index > 0 && <span className="text-sm text-gray-500">And</span>}
+                          {index > 0 && (
+                            <div className="relative w-full">
+                              <select
+                                className="block w-full pl-2 pr-6 py-1 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 appearance-none bg-white"
+                                value={rule.logicalOperator || "AND"}
+                                onChange={(e) => handleUpdateLogicalOperator(rule.columnId, e.target.value as "AND" | "OR")}
+                              >
+                                <option value="AND">And</option>
+                                <option value="OR">Or</option>
+                              </select>
+                              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-1 text-gray-700">
+                                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                </svg>
+                              </div>
+                            </div>
+                          )}
                         </div>
                         
                         {/* Column Dropdown - wider */}

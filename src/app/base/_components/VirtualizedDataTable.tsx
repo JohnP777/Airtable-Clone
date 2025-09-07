@@ -104,7 +104,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
       page: 0,
       pageSize: 1,
       sortRules: sortRules.length ? sortRules.map(rule => ({ columnId: rule.columnId, direction: rule.direction })) : undefined,
-      filterRules: filterRules.length ? filterRules.map(rule => ({ columnId: rule.columnId, operator: rule.operator as any, value: rule.value })) : undefined,
+      filterRules: filterRules.length ? filterRules.map(rule => ({ columnId: rule.columnId, operator: rule.operator as any, value: rule.value, logicalOperator: rule.logicalOperator })) : undefined,
     },
     { 
       enabled: metaEnabled,      // <-- not blocked by hydration
@@ -177,7 +177,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
       page: safeStartPage,
       pageSize: PAGE_SIZE,
       sortRules: sortRules.length ? sortRules.map(rule => ({ columnId: rule.columnId, direction: rule.direction })) : undefined,
-      filterRules: filterRules.length ? filterRules.map(rule => ({ columnId: rule.columnId, operator: rule.operator as any, value: rule.value })) : undefined,
+      filterRules: filterRules.length ? filterRules.map(rule => ({ columnId: rule.columnId, operator: rule.operator as any, value: rule.value, logicalOperator: rule.logicalOperator })) : undefined,
     },
     { 
       enabled: rowsEnabled && safeStartPage >= 0,
@@ -196,7 +196,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
       page: safeEndPage,
       pageSize: PAGE_SIZE,
       sortRules: sortRules.length ? sortRules.map(rule => ({ columnId: rule.columnId, direction: rule.direction })) : undefined,
-      filterRules: filterRules.length ? filterRules.map(rule => ({ columnId: rule.columnId, operator: rule.operator as any, value: rule.value })) : undefined,
+      filterRules: filterRules.length ? filterRules.map(rule => ({ columnId: rule.columnId, operator: rule.operator as any, value: rule.value, logicalOperator: rule.logicalOperator })) : undefined,
     },
     { 
       enabled: rowsEnabled && needEndPage,
@@ -216,7 +216,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
       page: midPage,
       pageSize: PAGE_SIZE,
       sortRules: sortRules.length ? sortRules.map(rule => ({ columnId: rule.columnId, direction: rule.direction })) : undefined,
-      filterRules: filterRules.length ? filterRules.map(rule => ({ columnId: rule.columnId, operator: rule.operator as any, value: rule.value })) : undefined,
+      filterRules: filterRules.length ? filterRules.map(rule => ({ columnId: rule.columnId, operator: rule.operator as any, value: rule.value, logicalOperator: rule.logicalOperator })) : undefined,
     },
     { 
       enabled: rowsEnabled && needMidPage,
@@ -234,7 +234,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
       page: Math.max(0, safeStartPage - 1),
       pageSize: PAGE_SIZE,
       sortRules: sortRules.length ? sortRules.map(rule => ({ columnId: rule.columnId, direction: rule.direction })) : undefined,
-      filterRules: filterRules.length ? filterRules.map(rule => ({ columnId: rule.columnId, operator: rule.operator as any, value: rule.value })) : undefined,
+      filterRules: filterRules.length ? filterRules.map(rule => ({ columnId: rule.columnId, operator: rule.operator as any, value: rule.value, logicalOperator: rule.logicalOperator })) : undefined,
     },
     { 
       enabled: rowsEnabled && safeStartPage > 0,
@@ -250,7 +250,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
       tableId,
       viewId: currentViewId ?? undefined,
       sort: sortRules.map(r => ({ columnId: r.columnId, direction: r.direction })),
-      filter: filterRules.map(r => ({ columnId: r.columnId, operator: r.operator, value: r.value })),
+      filter: filterRules.map(r => ({ columnId: r.columnId, operator: r.operator, value: r.value, logicalOperator: r.logicalOperator })),
     }),
     [tableId, currentViewId, sortRules, filterRules]
   );
@@ -432,7 +432,8 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
         filterRules: filterRules.map(rule => ({
           columnId: rule.columnId,
           operator: rule.operator as "contains" | "does not contain" | "is" | "is not" | "is empty" | "is not empty",
-          value: rule.value
+          value: rule.value,
+          logicalOperator: rule.logicalOperator
         }))
       });
       
@@ -452,7 +453,8 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
         filterRules: filterRules.map(rule => ({
           columnId: rule.columnId,
           operator: rule.operator as "contains" | "does not contain" | "is" | "is not" | "is empty" | "is not empty",
-          value: rule.value
+          value: rule.value,
+          logicalOperator: rule.logicalOperator
         }))
       });
       return { previousData, previousColumnName: tableMeta?.columns.find(col => col.id === columnId)?.name };
