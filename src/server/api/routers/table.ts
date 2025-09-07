@@ -6,15 +6,9 @@ import { TRPCError } from "@trpc/server";
 
 // Configuration for bulk operations
 const BULK_OPERATION_CONFIG = {
-  // Adjust batch size based on database performance
-  // Reduced from 2500 to prevent transaction timeouts
   BATCH_SIZE: 1000,
-  // Maximum concurrent batches to avoid overwhelming the database
-  // Reduced from 4 to 2 for more stable performance with larger datasets
   MAX_CONCURRENT_BATCHES: 6,
-  // Progress update interval in milliseconds
   PROGRESS_UPDATE_INTERVAL: 100,
-  // Enable database-specific optimizations
   ENABLE_FAST_PATH: true,
   // Use raw SQL for maximum performance when possible
   USE_RAW_SQL: false
@@ -971,55 +965,7 @@ export const tableRouter = createTRPCRouter({
       return { success: true };
     }),
 
-  populateCellsWithData: protectedProcedure
-    .input(z.object({ 
-      tableId: z.string(),
-      cellData: z.array(z.object({
-        rowId: z.string(),
-        columnId: z.string(),
-        value: z.string()
-      }))
-    }))
-    .mutation(async ({ ctx, input }) => {
-      // Verify user owns the table
-      const table = await ctx.db.table.findFirst({
-        where: { 
-          id: input.tableId,
-          base: { createdById: ctx.session.user.id }
-        }
-      });
-
-      if (!table) {
-        throw new Error("Table not found");
-      }
-
-      // Update multiple cells with the provided data
-      const updatePromises = input.cellData.map(cell => 
-        ctx.db.tableCell.upsert({
-          where: {
-            tableId_rowId_columnId: {
-              tableId: input.tableId,
-              rowId: cell.rowId,
-              columnId: cell.columnId
-            }
-          },
-          update: {
-            value: cell.value
-          },
-          create: {
-            tableId: input.tableId,
-            rowId: cell.rowId,
-            columnId: cell.columnId,
-            value: cell.value
-          }
-        })
-      );
-
-      await Promise.all(updatePromises);
-
-      return { success: true, updatedCells: input.cellData.length };
-    }),
-
+  //Used for adding 10k rows (not used anymore)
   addBulkRows: protectedProcedure
     .input(z.object({ 
       tableId: z.string(),
@@ -1112,9 +1058,8 @@ export const tableRouter = createTRPCRouter({
       };
     }),
 
-  // Ultra-fast bulk row addition using optimized batching
-  // Optimized for large datasets (100k+ rows) with stable transaction handling
-  // Memory-safe: generates fake data per batch and chunks cell creation
+  // Fast bulk row addition using optimized batching
+  // Optimized for large datasets with stable transaction handling
   addBulkRowsFast: protectedProcedure
     .input(z.object({ 
       tableId: z.string(),

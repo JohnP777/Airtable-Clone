@@ -706,8 +706,59 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
   // Keyboard navigation for cell selection
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // If editing, don't intercept arrow keys, Enter, Tab, etc.
-      if (editingCell) return;
+      // If editing, handle Tab key for saving and moving to next cell
+      if (editingCell) {
+        if (e.key === "Tab") {
+          e.preventDefault();
+          e.stopPropagation();
+          
+          // Save current cell
+          const finalValue = currentValueRef.current;
+          const columnType = getColumnType(editingCell.columnId);
+          const formattedValue = columnType === 'number' ? formatNumberInput(finalValue) : finalValue;
+          const cellKey = `${editingCell.rowId}-${editingCell.columnId}`;
+          setLocalCellValues(prev => ({ ...prev, [cellKey]: formattedValue }));
+          
+          void updateCellMutation.mutate({
+            tableId,
+            rowId: editingCell.rowId,
+            columnId: editingCell.columnId,
+            value: formattedValue,
+          });
+          setEditingCell(null);
+          
+          // Move to next cell (same as Tab navigation logic)
+          if (!tableMeta) return;
+          const visibleColumns = tableMeta.columns.filter(c => !isFieldHidden(c.id));
+          const rowIndex = allRows.findIndex(r => r.id === editingCell.rowId);
+          const colIndex = visibleColumns.findIndex(c => c.id === editingCell.columnId);
+          
+          if (rowIndex !== -1 && colIndex !== -1) {
+            let newRowIndex = rowIndex;
+            let newColIndex = colIndex + 1;
+            
+            // If at last column, wrap to next row
+            if (newColIndex >= visibleColumns.length) {
+              newColIndex = 0;
+              newRowIndex = rowIndex + 1;
+            }
+            
+            // If we have a valid next row, move to it
+            if (newRowIndex < allRows.length) {
+              const newRowId = allRows[newRowIndex]!.id;
+              const newColumnId = visibleColumns[newColIndex]!.id;
+              setSelectedCell({
+                rowId: newRowId,
+                columnId: newColumnId
+              });
+              // Scroll to keep the selected cell visible
+              scrollToSelectedCell(newRowId, newColumnId);
+            }
+          }
+          return;
+        }
+        return; // Don't handle other keys when editing
+      }
       
       if (!selectedCell || !tableMeta) return;
 
@@ -719,6 +770,31 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
 
       let newRowIndex = rowIndex;
       let newColIndex = colIndex;
+
+      // Check if user typed any printable character to start editing
+      if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        
+        // Start editing the selected cell with the typed character
+        const cellValue = localCellValues[`${selectedCell.rowId}-${selectedCell.columnId}`] ?? 
+                         allRows[rowIndex]?.cells.find(c => c.columnId === selectedCell.columnId)?.value ?? "";
+        
+        // For number columns, only start editing if the character is valid
+        const columnType = getColumnType(selectedCell.columnId);
+        if (columnType === 'number' && !/[0-9.-]/.test(e.key)) {
+          return; // Don't start editing for invalid number input
+        }
+        
+        setEditingCell({
+          rowId: selectedCell.rowId,
+          columnId: selectedCell.columnId,
+          value: e.key // Start with the typed character
+        });
+        
+        // Set the current value ref for the input
+        currentValueRef.current = e.key;
+        return;
+      }
 
       // Enter -> start editing selected cell (if not already editing)
       if (e.key === "Enter") {
@@ -803,7 +879,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedCell, allRows, tableMeta, isFieldHidden, editingCell, localCellValues]);
+  }, [selectedCell, allRows, tableMeta, isFieldHidden, editingCell, localCellValues, tableId, updateCellMutation, getColumnType, formatNumberInput, scrollToSelectedCell]);
 
   // Deselect cell when clicking outside the table
   useEffect(() => {
@@ -1203,7 +1279,12 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                    className="w-full h-full bg-transparent border-none outline-none focus:ring-0 pointer-events-auto text-[13px]"
                    autoFocus
                    onFocus={(e) => {
-                     currentValueRef.current = e.target.value;
+                     // If we just started editing with a typed character, use that value
+                     if (currentValueRef.current && currentValueRef.current !== e.target.value) {
+                       e.target.value = currentValueRef.current;
+                     } else {
+                       currentValueRef.current = e.target.value;
+                     }
                    }}
                  />
                ) : (
@@ -1725,7 +1806,12 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                                  className="w-full h-full bg-transparent border-none outline-none focus:ring-0 pointer-events-auto text-[13px]"
                                  autoFocus
                                  onFocus={(e) => {
-                                   currentValueRef.current = e.target.value;
+                                   // If we just started editing with a typed character, use that value
+                                   if (currentValueRef.current && currentValueRef.current !== e.target.value) {
+                                     e.target.value = currentValueRef.current;
+                                   } else {
+                                     currentValueRef.current = e.target.value;
+                                   }
                                  }}
                                />
                              ) : (
