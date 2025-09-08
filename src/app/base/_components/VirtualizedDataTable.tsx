@@ -28,8 +28,8 @@ interface VirtualizedDataTableProps {
   tableId: string;
 }
 
-const ROW_HEIGHT = 36; // 36px for smaller rows
-const PAGE_SIZE = 100; // Load 100 rows per page (backend limit)
+const ROW_HEIGHT = 36; 
+const PAGE_SIZE = 100; 
 
 export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
   const utils = api.useUtils();
@@ -85,10 +85,10 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
   const [newColumnType, setNewColumnType] = useState<'text' | 'number' | null>(null);
   const [newColumnName, setNewColumnName] = useState('');
 
-  // Local state to track cell values for immediate updates
+  // Local state to track cell values for immediate/optimistic updates
   const [localCellValues, setLocalCellValues] = useState<Record<string, string>>({});
   
-  // Local state to track column names for immediate updates
+  // Local state to track column names for immediate/optimistic updates
   const [localColumnNames, setLocalColumnNames] = useState<Record<string, string>>({});
 
   // Wait for contexts to be hydrated before enabling queries
@@ -707,6 +707,11 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
 
   // Keyboard navigation for cell selection
   useEffect(() => {
+    // When editing a column header name, block global key handling entirely
+    if (editingColumn) {
+      return;
+    }
+
     const handleKeyDown = (e: KeyboardEvent) => {
       // If editing, handle Tab key for saving and moving to next cell
       if (editingCell) {
@@ -880,7 +885,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedCell, allRows, tableMeta, isFieldHidden, editingCell, localCellValues, tableId, updateCellMutation, getColumnType, formatNumberInput, scrollToSelectedCell]);
+  }, [selectedCell, allRows, tableMeta, isFieldHidden, editingCell, editingColumn, localCellValues, tableId, updateCellMutation, getColumnType, formatNumberInput, scrollToSelectedCell]);
 
   // Deselect cell when clicking outside the table
   useEffect(() => {
