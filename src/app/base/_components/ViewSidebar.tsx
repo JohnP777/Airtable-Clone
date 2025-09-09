@@ -117,7 +117,7 @@ export function ViewSidebar({ tableId }: ViewSidebarProps) {
           >
             <div
               onClick={() => !editingViewId && switchView(view.id)}
-              className={`w-full px-2 py-1.5 rounded-md text-xs flex items-center gap-2 cursor-pointer ${
+              className={`w-full px-2 py-1.5 rounded-md text-xs flex items-center gap-2 cursor-pointer h-8 ${
                 currentViewId === view.id 
                   ? "bg-gray-100 text-gray-900" 
                   : "hover:bg-gray-100 text-gray-900"
@@ -153,22 +153,22 @@ export function ViewSidebar({ tableId }: ViewSidebarProps) {
                 <span className="truncate font-medium flex-1">{view.name}</span>
               )}
               
-              {/* Triple dot icon - only show on hover */}
-              {hoveredViewId === view.id && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setOpenDropdownId(openDropdownId === view.id ? null : view.id);
-                  }}
-                  className="p-1 hover:bg-gray-200 rounded"
-                >
-                  <svg className="h-4 w-4 text-gray-500" fill="currentColor" viewBox="0 0 24 24">
-                    <circle cx="5" cy="12" r="2"/>
-                    <circle cx="12" cy="12" r="2"/>
-                    <circle cx="19" cy="12" r="2"/>
-                  </svg>
-                </button>
-              )}
+              {/* Triple dot icon - always present but controlled by opacity */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setOpenDropdownId(openDropdownId === view.id ? null : view.id);
+                }}
+                className={`p-1 hover:bg-gray-200 rounded transition-opacity ${
+                  hoveredViewId === view.id ? 'opacity-100' : 'opacity-0'
+                }`}
+              >
+                <svg className="h-4 w-4 text-gray-500" fill="currentColor" viewBox="0 0 24 24">
+                  <circle cx="5" cy="12" r="2"/>
+                  <circle cx="12" cy="12" r="2"/>
+                  <circle cx="19" cy="12" r="2"/>
+                </svg>
+              </button>
             </div>
 
             {/* Dropdown Menu */}
