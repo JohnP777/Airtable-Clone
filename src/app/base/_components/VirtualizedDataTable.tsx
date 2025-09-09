@@ -80,6 +80,13 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
     y: number;
   } | null>(null);
 
+  // State for row context menu
+  const [rowContextMenu, setRowContextMenu] = useState<{
+    rowId: string;
+    x: number;
+    y: number;
+  } | null>(null);
+
   // State for new column dropdown
   const [showNewColumnDropdown, setShowNewColumnDropdown] = useState(false);
   const [newColumnType, setNewColumnType] = useState<'text' | 'number' | null>(null);
@@ -501,8 +508,54 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
   });
 
   const deleteColumnMutation = api.table.deleteColumn.useMutation({
-    onSuccess: () => {
-      // Invalidate cache after deleting column
+    onMutate: async ({ columnId }) => {
+      // Optimistically update the table schema to remove the column
+      const currentData = utils.table.getTableDataPaginated.getData({ 
+        tableId,
+        viewId: currentViewId ?? undefined,
+        page: startPage,
+        pageSize: PAGE_SIZE,
+        sortRules: sortRules.map(rule => ({
+          columnId: rule.columnId,
+          direction: rule.direction
+        })),
+        filterRules: filterRules.map(rule => ({
+          columnId: rule.columnId,
+          operator: rule.operator as "contains" | "does not contain" | "is" | "is not" | "is empty" | "is not empty",
+          value: rule.value,
+          logicalOperator: rule.logicalOperator
+        }))
+      });
+      
+      if (currentData?.table) {
+        const updatedTable = {
+          ...currentData.table,
+          columns: currentData.table.columns.filter(col => col.id !== columnId)
+        };
+        
+        utils.table.getTableDataPaginated.setData({ 
+          tableId,
+          viewId: currentViewId ?? undefined,
+          page: startPage,
+          pageSize: PAGE_SIZE,
+          sortRules: sortRules.map(rule => ({
+            columnId: rule.columnId,
+            direction: rule.direction
+          })),
+          filterRules: filterRules.map(rule => ({
+            columnId: rule.columnId,
+            operator: rule.operator as "contains" | "does not contain" | "is" | "is not" | "is empty" | "is not empty",
+            value: rule.value,
+            logicalOperator: rule.logicalOperator
+          }))
+        }, {
+          ...currentData,
+          table: updatedTable
+        });
+      }
+    },
+    onSettled: () => {
+      // Invalidate cache after mutation
       void utils.table.getTableDataPaginated.invalidate();
     },
   });
@@ -510,6 +563,54 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
   const addRowMutation = api.table.addRow.useMutation({
     onSuccess: () => {
       console.log("Single row added, invalidating cache...");
+      void utils.table.getTableDataPaginated.invalidate();
+    },
+  });
+
+  const deleteRowMutation = api.table.deleteRow.useMutation({
+    onMutate: async ({ rowId }) => {
+      // Optimistically update the table data to remove the row
+      const currentData = utils.table.getTableDataPaginated.getData({ 
+        tableId,
+        viewId: currentViewId ?? undefined,
+        page: startPage,
+        pageSize: PAGE_SIZE,
+        sortRules: sortRules.map(rule => ({
+          columnId: rule.columnId,
+          direction: rule.direction
+        })),
+        filterRules: filterRules.map(rule => ({
+          columnId: rule.columnId,
+          operator: rule.operator as "contains" | "does not contain" | "is" | "is not" | "is empty" | "is not empty",
+          value: rule.value,
+          logicalOperator: rule.logicalOperator
+        }))
+      });
+      
+      if (currentData?.rows) {
+        const updatedRows = currentData.rows.filter(row => row.id !== rowId);
+        utils.table.getTableDataPaginated.setData({ 
+          tableId,
+          viewId: currentViewId ?? undefined,
+          page: startPage,
+          pageSize: PAGE_SIZE,
+          sortRules: sortRules.map(rule => ({
+            columnId: rule.columnId,
+            direction: rule.direction
+          })),
+          filterRules: filterRules.map(rule => ({
+            columnId: rule.columnId,
+            operator: rule.operator as "contains" | "does not contain" | "is" | "is not" | "is empty" | "is not empty",
+            value: rule.value,
+            logicalOperator: rule.logicalOperator
+          }))
+        }, {
+          ...currentData,
+          rows: updatedRows
+        });
+      }
+    },
+    onSettled: () => {
       void utils.table.getTableDataPaginated.invalidate();
     },
   });
@@ -895,19 +996,23 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
       const isTableCell = target.closest('[data-row-id][data-column-id]');
       const isTableHeader = target.closest('[data-field-id]');
       const isContextMenu = target.closest('[data-context-menu]');
-      if (!isTableCell && !isTableHeader && !isContextMenu && (selectedCell || selectedColumn)) {
+      const isRowContextMenu = target.closest('[data-row-context-menu]');
+      if (!isTableCell && !isTableHeader && !isContextMenu && !isRowContextMenu && (selectedCell || selectedColumn)) {
         setSelectedCell(null);
         setSelectedColumn(null);
       }
-      // Close context menu when clicking outside
+      // Close context menus when clicking outside
       if (!isContextMenu && contextMenu) {
         setContextMenu(null);
+      }
+      if (!isRowContextMenu && rowContextMenu) {
+        setRowContextMenu(null);
       }
     };
 
     document.addEventListener("click", handleClickOutside);
     return () => document.removeEventListener("click", handleClickOutside);
-  }, [selectedCell, selectedColumn, contextMenu]);
+  }, [selectedCell, selectedColumn, contextMenu, rowContextMenu]);
 
   // Helper function to check if a field (column) should be highlighted
   const isFieldHighlighted = useCallback((columnId: string) => {
@@ -1395,10 +1500,10 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
   return (
     <div className="w-full overflow-hidden">
                    {/* Fixed Table Header */}
-      <div className="fixed top-33 z-10 bg-[#ffffff] border border-gray-200 border-b-0" style={{ left: '335px' }}>
+      <div className="fixed top-33 z-10 bg-[#ffffff] border-t border-l border-b-0 border-gray-200" style={{ left: '335.5px' }}>
         <div className="flex">
           {/* Row number column header */}
-          <div className="border-t border-b border-l border-gray-200 h-9 px-2 py-1 flex items-center justify-center" style={{ width: '80px', minWidth: '80px', maxWidth: '80px' }}>
+          <div className="border-t border-b border-gray-200 h-9 px-2 py-1 flex items-center justify-center" style={{ width: '80px', minWidth: '80px', maxWidth: '80px' }}>
             <div className="font-medium text-gray-700 text-sm">
               <div className="w-3 h-3 border border-gray-400 rounded-sm"></div>
             </div>
@@ -1411,7 +1516,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
               <div 
                 key={column.id}
                 data-field-id={column.id}
-                className={`border-t border-b ${index === 0 ? '' : 'border-l'} border-gray-200 h-9 px-2 py-1 flex items-center cursor-pointer select-none ${
+                className={`border-t border-b border-r border-gray-200 h-9 px-2 py-1 flex items-center cursor-pointer select-none ${
                   isFieldHighlighted(column.id) ? 'bg-orange-100' : ''
                 } ${isCurrentFieldResult(column.id) ? 'bg-orange-300' : ''} ${
                   isColumnSelected(column.id) ? 'bg-blue-100' : ''
@@ -1486,7 +1591,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
             ))}
           
           {/* Add column button */}
-          <div className="relative border border-gray-200 bg-gray-50 h-9 flex items-center justify-center" style={{ width: '32px', minWidth: '32px', maxWidth: '32px' }}>
+          <div className="relative border-t border-b border-r border-gray-200 bg-gray-50 h-9 flex items-center justify-center" style={{ width: '32px', minWidth: '32px', maxWidth: '32px' }}>
             <button
               onClick={handleOpenNewColumnDropdown}
               className="w-full h-full px-2 py-1 text-gray-500 hover:text-gray-700 hover:bg-gray-100 text-xs"
@@ -1583,7 +1688,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                                  {/* Virtualized table body using main page scroll */}
         <div 
           ref={listRef}
-          className="border-l border-b border-gray-200 bg-[#ffffff]"
+          className="border-b border-gray-200 bg-[#ffffff]"
           style={{ 
             height: `${virtualizer.getTotalSize()}px`,
                          width: `${80 + (tableMeta?.columns?.filter(col => !isFieldHidden(col.id)).length ?? 0) * 192}px`,
@@ -1635,7 +1740,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                                         {/* Data cells */}
                      {tableMeta?.columns
                        .filter(column => !isFieldHidden(column.id))
-                       .map((column) => {
+                       .map((column, columnIndex) => {
                          const cell = row.cells.find((c: { columnId: string }) => c.columnId === column.id);
                          const cellValue = cell?.value ?? '';
                          
@@ -1681,6 +1786,14 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                                  value: currentCellValue,
                                });
                                currentValueRef.current = currentCellValue; // Reset the ref to the cell value
+                             }}
+                             onContextMenu={(e) => {
+                               e.preventDefault();
+                               setRowContextMenu({
+                                 rowId: row.id,
+                                 x: e.clientX,
+                                 y: e.clientY
+                               });
                              }}
                            >
                              {isEditing ? (
@@ -1919,6 +2032,45 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
               />
             </svg>
             Delete field
+          </button>
+        </div>
+      )}
+
+      {/* Row Context Menu */}
+      {rowContextMenu && (
+        <div
+          data-row-context-menu
+          className="fixed bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-50 min-w-[200px]"
+          style={{
+            left: rowContextMenu.x,
+            top: rowContextMenu.y,
+          }}
+        >
+          <button
+            className="w-full px-4 py-2 text-sm text-left hover:bg-red-50 transition-colors flex items-center gap-3 text-red-600 hover:text-red-700"
+            onClick={() => {
+              void deleteRowMutation.mutate({
+                tableId,
+                rowId: rowContextMenu.rowId
+              });
+              setRowContextMenu(null);
+            }}
+          >
+            <svg
+              className="h-4 w-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+              />
+            </svg>
+            Delete record
           </button>
         </div>
       )}

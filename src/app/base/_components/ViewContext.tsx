@@ -32,7 +32,19 @@ export function ViewProvider({ baseId, children }: { baseId: string; children: R
 
   const create = api.table.createView.useMutation();
   const rename = api.table.renameView.useMutation();
-  const deleteView = api.table.deleteView.useMutation();
+  const deleteView = api.table.deleteView.useMutation({
+    onMutate: async ({ viewId }) => {
+      // Optimistically update the view list to remove the view
+      const currentData = utils.table.listViews.getData({ tableId: selectedTableId! });
+      if (currentData) {
+        const updatedViews = currentData.filter(v => v.id !== viewId);
+        utils.table.listViews.setData({ tableId: selectedTableId! }, updatedViews);
+      }
+    },
+    onSettled: () => {
+      void utils.table.listViews.invalidate({ tableId: selectedTableId! });
+    },
+  });
   const duplicate = api.table.duplicateView.useMutation();
   const [currentViewId, setCurrentViewId] = useState<string | null>(null);
 

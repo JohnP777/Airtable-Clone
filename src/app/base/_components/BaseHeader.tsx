@@ -95,7 +95,7 @@ export function BaseHeader({ baseId }: BaseHeaderProps) {
   };
 
   return (
-    <header className="relative z-50 w-full bg-white border-b border-gray-200 shadow-sm">
+    <header className="relative z-50 w-full bg-white border-b border-gray-200">
       <div className="mx-auto flex w-full h-14 items-center px-4 ml-14">
         {/* Left side - Base icon, name, and dropdown */}
         <div className="flex items-center">

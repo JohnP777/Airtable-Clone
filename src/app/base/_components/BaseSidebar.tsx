@@ -28,7 +28,7 @@ export function BaseSidebar() {
 
   return (
     <aside
-      className="fixed top-0 left-0 bottom-0 z-[999] w-14 border-r-2 border-gray-200 bg-white/80 backdrop-blur-sm"
+      className="fixed top-0 left-0 bottom-0 z-[999] w-14 border-r border-gray-200 bg-white/80 backdrop-blur-sm"
       aria-label="Base Sidebar"
     >
       {/* Home button in top left corner */}

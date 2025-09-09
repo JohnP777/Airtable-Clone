@@ -36,7 +36,15 @@ export function TableButtons({ baseId, onTableSelect, selectedTableId }: TableBu
   });
 
   const deleteTableMutation = api.table.deleteTable.useMutation({
-    onSuccess: () => {
+    onMutate: async ({ tableId }) => {
+      // Optimistically update the table list to remove the table
+      const currentData = utils.table.list.getData({ baseId });
+      if (currentData) {
+        const updatedTables = currentData.filter(t => t.id !== tableId);
+        utils.table.list.setData({ baseId }, updatedTables);
+      }
+    },
+    onSettled: () => {
       void utils.table.list.invalidate({ baseId });
       setDeletingTableId(null);
       setOpenDropdown(null);
@@ -47,10 +55,6 @@ export function TableButtons({ baseId, onTableSelect, selectedTableId }: TableBu
           onTableSelect(remainingTables[0]!.id);
         }
       }
-    },
-    onError: (error) => {
-      alert(error.message || "Failed to delete table");
-      setDeletingTableId(null);
     },
   });
 

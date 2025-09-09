@@ -1713,5 +1713,40 @@ export const tableRouter = createTRPCRouter({
       });
 
       return { success: true, table: updatedTable };
+    }),
+
+  // Delete row mutation
+  deleteRow: protectedProcedure
+    .input(z.object({ 
+      tableId: z.string(),
+      rowId: z.string()
+    }))
+    .mutation(async ({ ctx, input }) => {
+      // Verify user owns the table
+      const table = await ctx.db.table.findFirst({
+        where: {
+          id: input.tableId,
+          base: {
+            createdById: ctx.session.user.id
+          }
+        }
+      });
+
+      if (!table) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Table not found or you don't have permission to delete rows"
+        });
+      }
+
+      // Delete the row (cascade will handle related cells)
+      await ctx.db.tableRow.delete({
+        where: {
+          id: input.rowId,
+          tableId: input.tableId
+        }
+      });
+
+      return { success: true };
     })
 }); 

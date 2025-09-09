@@ -17,14 +17,18 @@ export function BaseContextMenu({ baseId, isOpen, onClose, position, onRename }:
 
   const utils = api.useUtils();
   const deleteMutation = api.base.delete.useMutation({
-    onSuccess: (data) => {
+    onMutate: async ({ id }) => {
+      // Optimistically update the base list to remove the base
+      const currentData = utils.base.getRecent.getData({ limit: 10 });
+      if (currentData) {
+        const updatedBases = currentData.filter(b => b.id !== id);
+        utils.base.getRecent.setData({ limit: 10 }, updatedBases);
+      }
+    },
+    onSettled: (data) => {
       console.log("Base deleted successfully:", data);
       void utils.base.getRecent.invalidate();
       onClose();
-    },
-    onError: (error) => {
-      console.error("Failed to delete base:", error);
-      alert("Failed to delete base. Please try again.");
     },
   });
 

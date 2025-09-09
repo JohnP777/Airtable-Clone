@@ -36,7 +36,7 @@ export function AuthedHeader() {
             <button
               aria-label="Expand sidebar"
               title="Expand sidebar"
-              className="flex h-8 w-8 items-center justify-center rounded hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-200 cursor-pointer"
+              className="flex h-8 w-8 items-center justify-center rounded hover:bg-gray-100 focus:outline-none cursor-pointer"
               onClick={() => setPinnedOpen(!isPinnedOpen)}
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

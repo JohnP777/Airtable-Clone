@@ -108,7 +108,7 @@ export function Sidebar() {
                 <div className="border-t border-gray-200 my-1 mx-3"></div>
                 <button className="flex w-full items-center gap-2 rounded-md px-3 py-2 hover:bg-gray-100">
                   <Image src="/e.PNG" alt="Templates and apps" width={18} height={18} />
-                  <span className="text-xs text-gray-900">Templates and apps</span>
+                  <span className="text-xs text-gray-900 whitespace-nowrap">Templates and apps</span>
                 </button>
                 <button className="flex w-full items-center gap-2 rounded-md px-3 py-2 hover:bg-gray-100">
                   <Image src="/f.PNG" alt="Marketplace" width={18} height={18} />
