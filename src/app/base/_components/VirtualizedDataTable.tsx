@@ -19,6 +19,7 @@ import { useFilterContext } from "./FilterContext";
 import { useSearchContext } from "./SearchContext";
 import { useHiddenFields } from "./HiddenFieldsContext";
 import { useLoadedRows } from "./LoadedRowsContext";
+import { useViewSidebarVisibility } from "./ViewSidebarVisibilityContext";
 
 // Added strong types for table row shape and cell value
 type CellValue = { value: string; cellId?: string; columnId: string; rowId: string };
@@ -39,6 +40,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
   const { searchResults, currentResultIndex } = useSearchContext();
   const { isFieldHidden, hydrated: hiddenHydrated } = useHiddenFields();
   const { setLoadedRows } = useLoadedRows();
+  const { isViewSidebarVisible } = useViewSidebarVisibility();
   const inputRef = useRef<HTMLInputElement>(null);
   const currentValueRef = useRef<string>("");
   const listRef = useRef<HTMLDivElement>(null);
@@ -1500,7 +1502,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
   return (
     <div className="w-full overflow-hidden">
                    {/* Fixed Table Header */}
-      <div className="fixed top-33 z-10 bg-[#ffffff] border-t border-l border-b-0 border-gray-200" style={{ left: '335.5px' }}>
+      <div className="fixed top-33 z-10 bg-[#ffffff] border-t border-l-[0.5px] border-b-0 border-gray-200" style={{ left: isViewSidebarVisible ? '335.5px' : '55.5px' }}>
         <div className="flex">
           {/* Row number column header */}
           <div className="border-t border-b border-gray-200 h-9 px-2 py-1 flex items-center justify-center" style={{ width: '80px', minWidth: '80px', maxWidth: '80px' }}>

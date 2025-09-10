@@ -6,6 +6,7 @@ import { VirtualizedDataTable } from "./VirtualizedDataTable";
 import { ViewSidebar } from "./ViewSidebar";
 import { useTableContext } from "./TableContext";
 import { useView } from "./ViewContext";
+import { useViewSidebarVisibility } from "./ViewSidebarVisibilityContext";
 
 interface BaseContentProps {
   baseId: string;
@@ -15,6 +16,7 @@ export function BaseContent({ baseId }: BaseContentProps) {
   const { data: tables, isLoading } = api.table.list.useQuery({ baseId });
   const { selectedTableId } = useTableContext();
   const { currentViewId } = useView();
+  const { isViewSidebarVisible } = useViewSidebarVisibility();
 
   if (isLoading) {
     return null;
@@ -34,10 +36,12 @@ export function BaseContent({ baseId }: BaseContentProps) {
   return (
     <div className="w-full h-full flex">
       {/* Views sidebar - positioned to touch the third header and primary sidebar */}
-      <div className="w-70 shrink-0 border-r border-gray-200 bg-white fixed left-14 top-28 bottom-0 z-10">
-        <ViewSidebar tableId={selectedTable.id} />
-      </div>
-      <div className="flex-1 ml-70 bg-[#f6f8fc]">
+      {isViewSidebarVisible && (
+        <div className="w-70 shrink-0 border-r border-gray-200 bg-white fixed left-14 top-28 bottom-0 z-10">
+          <ViewSidebar tableId={selectedTable.id} />
+        </div>
+      )}
+      <div className={`flex-1 ${isViewSidebarVisible ? 'ml-70' : 'ml-0'} bg-[#f6f8fc]`}>
         <div className="p-4">
           <VirtualizedDataTable key={currentViewId} tableId={selectedTable.id} />
         </div>

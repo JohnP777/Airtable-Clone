@@ -13,6 +13,8 @@ import { HiddenFieldsProvider } from "../_components/HiddenFieldsContext";
 import { ViewProvider } from "../_components/ViewContext";
 import { LoadedRowsProvider } from "../_components/LoadedRowsContext";
 import { FilterSortButtons } from "../_components/FilterSortButtons";
+import { BurgerToggleButton } from "../_components/BurgerToggleButton";
+import { ViewSidebarVisibilityProvider } from "../_components/ViewSidebarVisibilityContext";
 
 export default async function BasePage({ params, }: { params: Promise<{ id: string }>; }) {
   const { id } = await params;
@@ -27,6 +29,7 @@ export default async function BasePage({ params, }: { params: Promise<{ id: stri
             <SearchProvider>
               <HiddenFieldsProvider>
                 <LoadedRowsProvider>
+                <ViewSidebarVisibilityProvider>
                 <div className="min-h-screen bg-[#f6f8fc] relative overflow-hidden">
                   {/* Fixed Base Header */}
                   <div className="fixed top-0 left-0 right-0 z-50 bg-[#f6f8fc]">
@@ -52,13 +55,7 @@ export default async function BasePage({ params, }: { params: Promise<{ id: stri
                   <div className="fixed top-22 left-0 right-0 z-30 bg-[#f6f8fc]">
                     <div className="h-12 bg-[#ffffff] border-b border-gray-200 flex items-center justify-between">
                       <div className="flex items-center space-x-2 pl-18">
-                        <button className="flex items-center justify-center w-8 h-8 rounded hover:bg-gray-100 transition-colors">
-                          <svg className="h-4 w-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <line x1="3" y1="6" x2="21" y2="6" stroke="currentColor" strokeWidth="2"/>
-                            <line x1="3" y1="12" x2="21" y2="12" stroke="currentColor" strokeWidth="2"/>
-                            <line x1="3" y1="18" x2="21" y2="18" stroke="currentColor" strokeWidth="2"/>
-                          </svg>
-                        </button>
+                        <BurgerToggleButton />
                                                  <button className="flex items-center space-x-2 px-2 py-1.5 rounded-md text-xs hover:bg-gray-100 transition-colors">
                            <svg className="h-4 w-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                              <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="1.5"/>
@@ -89,6 +86,7 @@ export default async function BasePage({ params, }: { params: Promise<{ id: stri
                     </div>
                   </div>
                                   </div>
+                </ViewSidebarVisibilityProvider>
                 </LoadedRowsProvider>
               </HiddenFieldsProvider>
             </SearchProvider>
@@ -97,4 +95,4 @@ export default async function BasePage({ params, }: { params: Promise<{ id: stri
       </ViewProvider>
     </TableProvider>
   );
-} 
+}
