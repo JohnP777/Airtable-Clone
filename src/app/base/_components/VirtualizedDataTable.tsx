@@ -16,10 +16,10 @@ import { useView } from "./ViewContext";
 import { useTableContext } from "./TableContext";
 import { useSortContext } from "./SortContext";
 import { useFilterContext } from "./FilterContext";
-import { useSearchContext } from "./SearchContext";
 import { useHiddenFields } from "./HiddenFieldsContext";
 import { useLoadedRows } from "./LoadedRowsContext";
 import { useViewSidebarVisibility } from "./ViewSidebarVisibilityContext";
+import { useSearchContext } from "./SearchContext";
 
 // Added strong types for table row shape and cell value
 type CellValue = { value: string; cellId?: string; columnId: string; rowId: string };
@@ -37,10 +37,10 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
   const { sortRules } = useSortContext();
   const { filterRules, hydrated: filtersHydrated } = useFilterContext();
   const { currentViewId } = useView();
-  const { searchResults, currentResultIndex } = useSearchContext();
   const { isFieldHidden, hydrated: hiddenHydrated } = useHiddenFields();
   const { setLoadedRows } = useLoadedRows();
   const { isViewSidebarVisible } = useViewSidebarVisibility();
+  const { searchTerm, setIsSearching, setSearchResults } = useSearchContext();
   const inputRef = useRef<HTMLInputElement>(null);
   const currentValueRef = useRef<string>("");
   const listRef = useRef<HTMLDivElement>(null);
@@ -112,6 +112,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
       viewId: currentViewId ?? undefined,
       page: 0,
       pageSize: 1,
+      searchTerm: searchTerm || undefined,
       sortRules: sortRules.length ? sortRules.map(rule => ({ columnId: rule.columnId, direction: rule.direction })) : undefined,
       filterRules: filterRules.length ? filterRules.map(rule => ({ columnId: rule.columnId, operator: rule.operator as any, value: rule.value, logicalOperator: rule.logicalOperator })) : undefined,
     },
@@ -185,6 +186,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
       viewId: currentViewId ?? undefined,
       page: safeStartPage,
       pageSize: PAGE_SIZE,
+      searchTerm: searchTerm || undefined,
       sortRules: sortRules.length ? sortRules.map(rule => ({ columnId: rule.columnId, direction: rule.direction })) : undefined,
       filterRules: filterRules.length ? filterRules.map(rule => ({ columnId: rule.columnId, operator: rule.operator as any, value: rule.value, logicalOperator: rule.logicalOperator })) : undefined,
     },
@@ -204,6 +206,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
       viewId: currentViewId ?? undefined,
       page: safeEndPage,
       pageSize: PAGE_SIZE,
+      searchTerm: searchTerm || undefined,
       sortRules: sortRules.length ? sortRules.map(rule => ({ columnId: rule.columnId, direction: rule.direction })) : undefined,
       filterRules: filterRules.length ? filterRules.map(rule => ({ columnId: rule.columnId, operator: rule.operator as any, value: rule.value, logicalOperator: rule.logicalOperator })) : undefined,
     },
@@ -224,6 +227,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
       viewId: currentViewId ?? undefined,
       page: midPage,
       pageSize: PAGE_SIZE,
+      searchTerm: searchTerm || undefined,
       sortRules: sortRules.length ? sortRules.map(rule => ({ columnId: rule.columnId, direction: rule.direction })) : undefined,
       filterRules: filterRules.length ? filterRules.map(rule => ({ columnId: rule.columnId, operator: rule.operator as any, value: rule.value, logicalOperator: rule.logicalOperator })) : undefined,
     },
@@ -242,6 +246,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
       viewId: currentViewId ?? undefined,
       page: Math.max(0, safeStartPage - 1),
       pageSize: PAGE_SIZE,
+      searchTerm: searchTerm || undefined,
       sortRules: sortRules.length ? sortRules.map(rule => ({ columnId: rule.columnId, direction: rule.direction })) : undefined,
       filterRules: filterRules.length ? filterRules.map(rule => ({ columnId: rule.columnId, operator: rule.operator as any, value: rule.value, logicalOperator: rule.logicalOperator })) : undefined,
     },
@@ -387,6 +392,21 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
       setLoadedRows(loadedRowsData);
     }
   }, [allRows, tableData?.table, setLoadedRows]);
+
+  // Track search status and results
+  useEffect(() => {
+    if (searchTerm && searchTerm.trim()) {
+      setIsSearching(isLoading);
+      
+      if (!isLoading && tableData?.searchResults) {
+        // Use search results from server
+        setSearchResults(tableData.searchResults);
+      }
+    } else {
+      setIsSearching(false);
+      setSearchResults(null);
+    }
+  }, [searchTerm, isLoading, tableData?.searchResults, setIsSearching, setSearchResults]);
 
   // No longer rely on base row.order; use absolute index mapping to reflect sorted order
 
@@ -650,14 +670,6 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
     });
   }, [currentViewId, allRows, reorderRowsMutation, tableId]);
 
-  // Helper function to check if a cell should be highlighted
-  const isCellHighlighted = useCallback((rowId: string, columnId: string) => {
-    return searchResults.some(result => 
-      result.type === "cell" && 
-      result.rowId === rowId && 
-      result.columnId === columnId
-    );
-  }, [searchResults]);
 
   // New column dropdown handlers
   const handleOpenNewColumnDropdown = () => {
@@ -694,15 +706,6 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
     }
   };
 
-  // Helper function to check if current cell is the active search result
-  const isCurrentSearchResult = useCallback((rowId: string, columnId: string) => {
-    if (searchResults.length === 0 || currentResultIndex >= searchResults.length) return false;
-    const currentResult = searchResults[currentResultIndex];
-    if (!currentResult) return false;
-    return currentResult.type === "cell" && 
-           currentResult.rowId === rowId && 
-           currentResult.columnId === columnId;
-  }, [searchResults, currentResultIndex]);
 
   // Helper function to get column type
   const getColumnType = (columnId: string): string => {
@@ -775,42 +778,6 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
     }
   }, []);
 
-  // Scroll to current search result when it changes
-  useEffect(() => {
-    if (searchResults.length > 0 && currentResultIndex < searchResults.length) {
-      const currentResult = searchResults[currentResultIndex];
-      
-      if (currentResult?.type === "cell") {
-        // Find the cell element and scroll to it
-        const cellElement = document.querySelector(
-          `[data-row-id="${currentResult.rowId}"][data-column-id="${currentResult.columnId}"]`
-        );
-        
-        if (cellElement) {
-          console.log('Scrolling to cell:', currentResult.rowId, currentResult.columnId);
-          cellElement.scrollIntoView({
-            behavior: 'smooth',
-            block: 'center',
-            inline: 'nearest'
-          });
-        }
-      } else if (currentResult?.type === "field") {
-        // Find the field header element and scroll to it
-        const fieldElement = document.querySelector(
-          `[data-field-id="${currentResult.columnId}"]`
-        );
-        
-        if (fieldElement) {
-          console.log('Scrolling to field:', currentResult.columnId);
-          fieldElement.scrollIntoView({
-            behavior: 'smooth',
-            block: 'center',
-            inline: 'nearest'
-          });
-        }
-      }
-    }
-  }, [currentResultIndex, searchResults]);
 
   // Keyboard navigation for cell selection
   useEffect(() => {
@@ -1020,22 +987,6 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
     return () => document.removeEventListener("click", handleClickOutside);
   }, [selectedCell, selectedColumn, contextMenu, rowContextMenu]);
 
-  // Helper function to check if a field (column) should be highlighted
-  const isFieldHighlighted = useCallback((columnId: string) => {
-    return searchResults.some(result => 
-      result.type === "field" && 
-      result.columnId === columnId
-    );
-  }, [searchResults]);
-
-  // Helper function to check if current field is the active search result
-  const isCurrentFieldResult = useCallback((columnId: string) => {
-    if (searchResults.length === 0 || currentResultIndex >= searchResults.length) return false;
-    const currentResult = searchResults[currentResultIndex];
-    if (!currentResult) return false;
-    return currentResult.type === "field" && 
-           currentResult.columnId === columnId;
-  }, [searchResults, currentResultIndex]);
 
   // Helper function to check if a row has a selected cell
   const isRowSelected = useCallback((rowId: string) => {
@@ -1156,8 +1107,6 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                        <div 
               data-field-id={column.id}
               className={`px-2 py-1 font-medium text-gray-700 text-sm cursor-pointer select-none ${
-                isFieldHighlighted(column.id) ? 'bg-orange-100' : ''
-              } ${isCurrentFieldResult(column.id) ? 'bg-orange-300' : ''} ${
                 isColumnSelected(column.id) ? 'bg-blue-100' : ''
               }`}
              onClick={() => {
@@ -1233,16 +1182,14 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
            const isEditing = editingCell?.rowId === cellData.rowId && editingCell?.columnId === cellData.columnId;
            const isSelected = selectedCell?.rowId === cellData.rowId && selectedCell?.columnId === cellData.columnId;
 
-           const isHighlighted = isCellHighlighted(cellData.rowId, cellData.columnId);
-           const isCurrent = isCurrentSearchResult(cellData.rowId, cellData.columnId);
            
            return (
              <div 
                data-row-id={cellData.rowId}
                data-column-id={cellData.columnId}
                className={`px-2 py-1 cursor-pointer w-full h-full flex items-center pointer-events-none ${
-                 isCurrent ? 'bg-orange-300' : isHighlighted ? 'bg-orange-100' : ''
-               } ${isSelected ? 'bg-white outline outline-2 outline-blue-500 p-0.5' : ''} ${
+                 isSelected ? 'bg-white outline outline-2 outline-blue-500 p-0.5' : ''
+               } ${
                  isColumnSelected(cellData.columnId) && !isSelected ? 'bg-blue-50' : ''
                }`}
                onClick={(e) => {
@@ -1423,7 +1370,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
 
     // Return row number column + data columns
     return [rowNumberColumn, ...dataColumns];
-  }, [tableData, editingColumn, editingCell, updateColumnMutation, updateCellMutation, tableId, localCellValues, localColumnNames, isCellHighlighted, isCurrentSearchResult, isFieldHighlighted, isCurrentFieldResult, isFieldHidden]);
+  }, [tableData, editingColumn, editingCell, updateColumnMutation, updateCellMutation, tableId, localCellValues, localColumnNames, isFieldHidden]);
 
   const table = useReactTable({
     data: tableRows,
@@ -1543,8 +1490,6 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                 key={column.id}
                 data-field-id={column.id}
                 className={`border-t border-b border-r border-gray-200 h-9 px-2 py-1 flex items-center cursor-pointer select-none ${
-                  isFieldHighlighted(column.id) ? 'bg-orange-100' : ''
-                } ${isCurrentFieldResult(column.id) ? 'bg-orange-300' : ''} ${
                   isColumnSelected(column.id) ? 'bg-blue-100' : ''
                 }`}
                 style={{ width: '192px', minWidth: '192px', maxWidth: '192px' }}
@@ -1790,8 +1735,6 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                          
                          const isEditing = editingCell?.rowId === row.id && editingCell?.columnId === column.id;
                          const isSelected = selectedCell?.rowId === row.id && selectedCell?.columnId === column.id;
-                         const isHighlighted = isCellHighlighted(row.id, column.id);
-                         const isCurrent = isCurrentSearchResult(row.id, column.id);
                          
                          return (
                            <div 
@@ -1808,8 +1751,8 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                            >
                                                         <div 
                                className={`px-2 py-1 cursor-pointer w-full h-full flex items-center pointer-events-none ${
-                                 isCurrent ? 'bg-orange-300' : isHighlighted ? 'bg-orange-100' : ''
-                               } ${isSelected ? 'bg-white outline outline-2 outline-blue-500 p-0.5' : ''} ${
+                                 isSelected ? 'bg-white outline outline-2 outline-blue-500 p-0.5' : ''
+                               } ${
                                  isColumnSelected(column.id) && !isSelected ? 'bg-blue-50' : ''
                                }`}
                                onClick={(e) => {

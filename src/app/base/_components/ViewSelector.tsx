@@ -2,15 +2,18 @@
 
 import React, { useState } from "react";
 import { useView } from "./ViewContext";
+import { useSearchContext } from "./SearchContext";
 
 export function ViewSelector() {
   const { views, currentViewId, switchView, createView } = useView();
+  const { clearSearch } = useSearchContext();
   const [showAddView, setShowAddView] = useState(false);
   const [newViewName, setNewViewName] = useState("");
 
   const handleCreateView = () => {
     if (newViewName.trim()) {
       createView(newViewName.trim());
+      clearSearch(); // Clear search when creating a new view
       setNewViewName("");
       setShowAddView(false);
     }

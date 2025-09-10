@@ -1068,6 +1068,7 @@ export const tableRouter = createTRPCRouter({
       viewId: z.string().optional(),
       page: z.number().min(0).default(0),
       pageSize: z.number().min(1).max(100).default(50),
+      searchTerm: z.string().optional(),
       sortRules: z.array(z.object({
         columnId: z.string(),
         direction: z.enum(["asc", "desc"])
@@ -1133,6 +1134,20 @@ export const tableRouter = createTRPCRouter({
 
       const joins: Prisma.Sql[] = [];
       const whereParts: Prisma.Sql[] = [Prisma.sql`tr."tableId" = ${input.tableId}`];
+
+      // Add search functionality - search across all fields
+      if (input.searchTerm && input.searchTerm.trim()) {
+        const searchTerm = input.searchTerm.trim().toLowerCase();
+        const searchLike = `%${searchTerm}%`;
+        
+        // Create a subquery to find rows that have at least one cell containing the search term
+        whereParts.push(Prisma.sql`tr.id IN (
+          SELECT DISTINCT tc."rowId"
+          FROM "TableCell" tc
+          WHERE tc."rowId" = tr.id
+          AND LOWER(tc.value) LIKE ${searchLike}
+        )`);
+      }
 
       // Process filters with proper AND/OR logic
       if (effectiveFilter.length > 0) {
@@ -1312,6 +1327,130 @@ export const tableRouter = createTRPCRouter({
       const orderMap = new Map(idWindow.map((r, i) => [r.id, i]));
       rows.sort((a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0));
 
+      // Calculate search result counts if search is active
+      let searchResults = null;
+      if (input.searchTerm && input.searchTerm.trim()) {
+        const searchTerm = input.searchTerm.trim().toLowerCase();
+        const searchLike = `%${searchTerm}%`;
+        
+        // Build filter conditions for search counts (same logic as main query)
+        const searchFilterJoins: Prisma.Sql[] = [];
+        const searchFilterConditions: Prisma.Sql[] = [];
+        
+        if (effectiveFilter.length > 0) {
+          const validFilters = effectiveFilter.filter(f => {
+            if (f.operator === "is empty" || f.operator === "is not empty") {
+              return true;
+            }
+            if (["equals", "not equals", "less than", "greater than", "less than or equal", "greater than or equal"].includes(f.operator)) {
+              return f.value && f.value.trim() !== "" && !isNaN(Number(f.value));
+            }
+            return f.value && f.value.trim() !== "";
+          });
+
+          if (validFilters.length > 0) {
+            validFilters.forEach((f, idx) => {
+              const alias = Prisma.raw(`sf${idx}`);
+              searchFilterJoins.push(Prisma.sql`
+                LEFT JOIN "TableCell" ${alias}
+                  ON ${alias}."rowId" = tr.id AND ${alias}."columnId" = ${f.columnId}
+              `);
+              
+              const v = (f.value ?? "").toLowerCase();
+              const like = `%${v}%`;
+              let condition: Prisma.Sql;
+              
+              switch (f.operator) {
+                case "contains":
+                  condition = Prisma.sql`LOWER(COALESCE(${alias}.value, '')) LIKE ${like}`;
+                  break;
+                case "does not contain":
+                  condition = Prisma.sql`(LOWER(COALESCE(${alias}.value, '')) NOT LIKE ${like})`;
+                  break;
+                case "is":
+                  condition = Prisma.sql`LOWER(COALESCE(${alias}.value, '')) = ${v}`;
+                  break;
+                case "is not":
+                  condition = Prisma.sql`LOWER(COALESCE(${alias}.value, '')) <> ${v}`;
+                  break;
+                case "is empty":
+                  condition = Prisma.sql`${alias}.value IS NULL OR ${alias}.value = ''`;
+                  break;
+                case "is not empty":
+                  condition = Prisma.sql`${alias}.value IS NOT NULL AND ${alias}.value <> ''`;
+                  break;
+                case "equals":
+                  condition = Prisma.sql`${alias}.value IS NOT NULL AND ${alias}.value != '' AND ${alias}.value::numeric = ${f.value}::numeric`;
+                  break;
+                case "not equals":
+                  condition = Prisma.sql`${alias}.value IS NOT NULL AND ${alias}.value != '' AND ${alias}.value::numeric <> ${f.value}::numeric`;
+                  break;
+                case "less than":
+                  condition = Prisma.sql`${alias}.value IS NOT NULL AND ${alias}.value != '' AND ${alias}.value::numeric < ${f.value}::numeric`;
+                  break;
+                case "greater than":
+                  condition = Prisma.sql`${alias}.value IS NOT NULL AND ${alias}.value != '' AND ${alias}.value::numeric > ${f.value}::numeric`;
+                  break;
+                case "less than or equal":
+                  condition = Prisma.sql`${alias}.value IS NOT NULL AND ${alias}.value != '' AND ${alias}.value::numeric <= ${f.value}::numeric`;
+                  break;
+                case "greater than or equal":
+                  condition = Prisma.sql`${alias}.value IS NOT NULL AND ${alias}.value != '' AND ${alias}.value::numeric >= ${f.value}::numeric`;
+                  break;
+                default:
+                  condition = Prisma.sql`TRUE`;
+              }
+
+              if (idx === 0) {
+                searchFilterConditions.push(condition);
+              } else {
+                const logicalOp = f.logicalOperator || "AND";
+                if (logicalOp === "AND") {
+                  searchFilterConditions.push(Prisma.sql`AND ${condition}`);
+                } else {
+                  searchFilterConditions.push(Prisma.sql`OR ${condition}`);
+                }
+              }
+            });
+          }
+        }
+        
+        // Count total matching cells across all rows that match the search AND filters
+        const cellCountQuery = Prisma.sql`
+          SELECT COUNT(*) as count
+          FROM "TableCell" tc
+          INNER JOIN "TableRow" tr ON tc."rowId" = tr.id
+          ${searchFilterJoins.length > 0 ? Prisma.join(searchFilterJoins, ' ') : Prisma.empty}
+          WHERE tr."tableId" = ${input.tableId}
+          AND LOWER(tc.value) LIKE ${searchLike}
+          ${searchFilterConditions.length > 0 ? Prisma.sql`AND ${Prisma.join(searchFilterConditions, ' ')}` : Prisma.empty}
+        `;
+        
+        const cellCountResult = await ctx.db.$queryRaw<[{ count: bigint }]>(cellCountQuery);
+        
+        // Count unique records that have at least one matching cell AND pass filters
+        const recordCountQuery = Prisma.sql`
+          SELECT COUNT(DISTINCT tr.id) as count
+          FROM "TableRow" tr
+          ${searchFilterJoins.length > 0 ? Prisma.join(searchFilterJoins, ' ') : Prisma.empty}
+          WHERE tr."tableId" = ${input.tableId}
+          AND tr.id IN (
+            SELECT DISTINCT tc."rowId"
+            FROM "TableCell" tc
+            WHERE tc."rowId" = tr.id
+            AND LOWER(tc.value) LIKE ${searchLike}
+          )
+          ${searchFilterConditions.length > 0 ? Prisma.sql`AND ${Prisma.join(searchFilterConditions, ' ')}` : Prisma.empty}
+        `;
+        
+        const recordCountResult = await ctx.db.$queryRaw<[{ count: bigint }]>(recordCountQuery);
+        
+        searchResults = {
+          cellCount: Number(cellCountResult[0]?.count || 0),
+          recordCount: Number(recordCountResult[0]?.count || 0)
+        };
+      }
+
       return {
         table,
         rows,
@@ -1322,123 +1461,11 @@ export const tableRouter = createTRPCRouter({
           totalPages: Math.ceil(totalRows / input.pageSize),
           hasNextPage: (input.page + 1) * input.pageSize < totalRows,
           hasPreviousPage: input.page > 0
-        }
+        },
+        ...(searchResults && { searchResults })
       };
     }),
 
-  // New search endpoint that searches across all rows
-  searchPaginated: protectedProcedure
-    .input(z.object({
-      tableId: z.string(),
-      query: z.string().min(1), // Changed from searchTerm to query
-      offset: z.number().min(0).default(0),
-      limit: z.number().min(1).max(200).default(100), // Cap at 200 for performance
-      sortRules: z.array(z.object({
-        columnId: z.string(),
-        direction: z.enum(["asc", "desc"])
-      })).optional(),
-      filterRules: z.array(z.object({
-        columnId: z.string(),
-        operator: z.string(),
-        value: z.string()
-      })).optional()
-    }))
-    .query(async ({ ctx, input }) => {
-      // Set a timeout to prevent long-running searches
-      await ctx.db.$executeRaw`SET LOCAL statement_timeout = '3000ms'`;
-
-      const table = await ctx.db.table.findFirst({
-        where: {
-          id: input.tableId,
-          base: {
-            createdById: ctx.session.user.id
-          }
-        },
-        include: {
-          columns: {
-            orderBy: { order: "asc" }
-          }
-        }
-      });
-
-      if (!table) {
-        throw new Error("Table not found");
-      }
-
-      const searchLower = input.query.toLowerCase();
-
-      // First, find all row IDs that contain matches (for total count and navigation)
-      // Use a more efficient approach for large tables
-      const matchingRowIds = await ctx.db.$queryRaw<Array<{ rowId: string; order: number }>>`
-        SELECT DISTINCT tr.id as "rowId", tr.order
-        FROM "TableRow" tr
-        JOIN "TableCell" tc ON tr.id = tc."rowId"
-        JOIN "TableColumn" tcol ON tc."columnId" = tcol.id
-        WHERE tr."tableId" = ${input.tableId}
-        AND (
-          LOWER(tc.value) LIKE ${`%${searchLower}%`}
-          OR LOWER(tcol.name) LIKE ${`%${searchLower}%`}
-        )
-        ORDER BY tr.order ASC
-        LIMIT 1000
-      `;
-
-      const totalMatches = matchingRowIds.length;
-
-      // Get the specific window of matching rows using offset/limit
-      const windowStart = input.offset;
-      const windowEnd = input.offset + input.limit;
-      const windowRowIds = matchingRowIds.slice(windowStart, windowEnd);
-
-      if (windowRowIds.length === 0) {
-        return {
-          table,
-          rows: [],
-          totalMatches,
-          matchRowIds: matchingRowIds.map(r => ({ id: r.rowId, order: r.order })),
-          pagination: {
-            offset: input.offset,
-            limit: input.limit,
-            totalMatches,
-            hasMore: windowEnd < totalMatches,
-            nextOffset: windowEnd < totalMatches ? windowEnd : undefined
-          }
-        };
-      }
-
-      // Fetch the actual row data for the current window
-      const rows = await ctx.db.tableRow.findMany({
-        where: {
-          id: { in: windowRowIds.map(r => r.rowId) }
-        },
-        orderBy: { order: "asc" },
-        include: {
-          cells: {
-            include: {
-              column: true
-            }
-          }
-        }
-      });
-
-      // Sort rows by the order they appeared in the search results
-      const rowOrderMap = new Map(windowRowIds.map((r, index) => [r.rowId, index]));
-      rows.sort((a, b) => (rowOrderMap.get(a.id) ?? 0) - (rowOrderMap.get(b.id) ?? 0));
-
-      return {
-        table,
-        rows,
-        totalMatches,
-        matchRowIds: matchingRowIds.map(r => ({ id: r.rowId, order: r.order })),
-        pagination: {
-          offset: input.offset,
-          limit: input.limit,
-          totalMatches,
-          hasMore: windowEnd < totalMatches,
-          nextOffset: windowEnd < totalMatches ? windowEnd : undefined
-        }
-      };
-    }),
 
   // Delete table mutation
   deleteTable: protectedProcedure

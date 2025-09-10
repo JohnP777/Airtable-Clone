@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { useView } from "./ViewContext";
+import { useSearchContext } from "./SearchContext";
 
 interface ViewSidebarProps {
   tableId: string;
@@ -9,6 +10,7 @@ interface ViewSidebarProps {
 
 export function ViewSidebar({ tableId }: ViewSidebarProps) {
   const { views, currentViewId, switchView, createView, renameView, deleteView, duplicateView } = useView();
+  const { clearSearch } = useSearchContext();
   const [hoveredViewId, setHoveredViewId] = useState<string | null>(null);
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const [editingViewId, setEditingViewId] = useState<string | null>(null);
@@ -66,6 +68,7 @@ export function ViewSidebar({ tableId }: ViewSidebarProps) {
   const handleDuplicateView = async (viewId: string) => {
     try {
       await duplicateView(viewId);
+      clearSearch(); // Clear search when duplicating a view
       setOpenDropdownId(null);
     } catch (error) {
       console.error("Failed to duplicate view:", error);
@@ -78,6 +81,7 @@ export function ViewSidebar({ tableId }: ViewSidebarProps) {
       <button
         onClick={() => {
           createView(`Grid view ${views.length + 1}`);
+          clearSearch(); // Clear search when creating a new view
         }}
         className="w-full px-2 py-0.5 rounded-md text-xs flex items-center gap-3 cursor-pointer hover:bg-gray-100 text-gray-900 mb-2 mt-6"
       >
