@@ -18,32 +18,20 @@ export function BaseContent({ baseId }: BaseContentProps) {
   const { currentViewId } = useView();
   const { isViewSidebarVisible } = useViewSidebarVisibility();
 
-  if (isLoading) {
-    return null;
-  }
-
-  if (!tables || tables.length === 0) {
-    return null;
-  }
-
-  // Find the selected table
-  const selectedTable = tables.find(table => table.id === selectedTableId) ?? tables[0];
-  
-  if (!selectedTable) {
-    return null;
-  }
+  // Find the selected table if available
+  const selectedTable = tables?.find(table => table.id === selectedTableId) ?? tables?.[0];
 
   return (
     <div className="w-full h-full flex">
       {/* Views sidebar - positioned to touch the third header and primary sidebar */}
       {isViewSidebarVisible && (
         <div className="w-70 shrink-0 border-r border-gray-200 bg-white fixed left-14 top-28 bottom-0 z-10">
-          <ViewSidebar tableId={selectedTable.id} />
+          <ViewSidebar tableId={selectedTable?.id ?? ""} />
         </div>
       )}
       <div className={`flex-1 ${isViewSidebarVisible ? 'ml-70' : 'ml-0'} bg-[#f6f8fc]`}>
         <div className="p-4">
-          <VirtualizedDataTable key={currentViewId} tableId={selectedTable.id} />
+          <VirtualizedDataTable key={currentViewId ?? 'skeleton'} tableId={selectedTable?.id ?? ""} />
         </div>
       </div>
     </div>

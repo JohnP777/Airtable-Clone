@@ -324,6 +324,10 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
     endPageData?.table,
   ]);
   const tableMeta = tableMetaRef.current;
+  // Reset cached schema when switching table or view so we can show a skeleton
+  useEffect(() => {
+    tableMetaRef.current = null;
+  }, [tableId, currentViewId]);
 
   // Combine all loaded data (current + middle + end + previous pages)
   const allRows = useMemo(() => {
@@ -1431,48 +1435,68 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
   // Don't return null on loading - keep the table mounted to prevent layout collapse
   // The loading state is handled by showing "Loading row..." placeholders in the rows
 
-  // If no data and no rows, show empty table structure
-  if (!tableData && totalRows === 0) {
+  // Show skeleton table while schema for the new table/view is loading
+  if (!tableMeta) {
+    const skeletonCols = 3;
+    const skeletonRows = 100;
     return (
-      <div className="w-full">
-        <table className="border-collapse border border-gray-200 table-fixed">
-          <thead className="bg-gray-50 sticky top-0 z-10 bg-white">
-                         <tr className="h-9">
-                               <th className="border-t border-b border-l border-gray-200 h-9" style={{ width: '80px' }}>
-                 <div className="px-2 py-1 font-medium text-gray-700 text-sm">
-                   <div className="w-3 h-3 border border-gray-400 rounded-sm"></div>
-                 </div>
-               </th>
-                              <th className="border border-gray-200 bg-gray-50 w-8 h-9">
-                 <button
-                   onClick={() => void addColumnMutation.mutate({ tableId })}
-                   className="w-full h-full px-2 py-1 text-gray-500 hover:text-gray-700 hover:bg-gray-100 text-xs"
-                 >
-                   +
-                 </button>
-               </th>
-            </tr>
-          </thead>
-        </table>
-        
-        {/* Empty table body */}
-        <div className="border border-gray-200 border-t-0 h-64 flex items-center justify-center text-gray-500">
-          No data available
+      <div className="w-full overflow-hidden">
+        {/* Fixed Skeleton Header */}
+        <div className="fixed top-33 z-10 bg-[#ffffff] border-t border-l-[0.5px] border-b-0 border-gray-200" style={{ left: isViewSidebarVisible ? '335.5px' : '55.5px' }}>
+          <div className="flex">
+            <div className="border-t border-b border-gray-200 h-9 px-2 py-1 flex items-center justify-center" style={{ width: '80px', minWidth: '80px', maxWidth: '80px' }}>
+              <div className="w-3 h-3 border border-gray-400 rounded-sm"></div>
+            </div>
+            {Array.from({ length: skeletonCols }).map((_, i) => (
+              <div key={i} className="border-t border-b border-r border-gray-200 h-9 px-2 py-1 flex items-center" style={{ width: '192px', minWidth: '192px', maxWidth: '192px' }}>
+                <div className="h-3 w-24 bg-gray-200 rounded animate-pulse" />
+              </div>
+            ))}
+            <div className="relative border-t border-b border-r border-gray-200 bg-gray-50 h-9 flex items-center justify-center" style={{ width: '32px', minWidth: '32px', maxWidth: '32px' }}>
+              <div className="h-3 w-3 bg-gray-200 rounded-full animate-pulse" />
+            </div>
+          </div>
         </div>
-        
-        {/* Add row button */}
-        <div className="border border-gray-200 border-t-0 bg-gray-50 h-9 flex items-center justify-center">
-          <button
-            onClick={() => {
-              if (!tableId) return;
-              void addRowMutation.mutate({ tableId });
+
+        {/* Skeleton body */}
+        <div style={{ marginTop: '20px', marginLeft: '40px', overflow: 'hidden' }}>
+          <div 
+            className="border-b border-gray-200 bg-[#ffffff]"
+            style={{ 
+              height: `${skeletonRows * ROW_HEIGHT}px`,
+              width: `${80 + skeletonCols * 192}px`,
+              position: 'relative',
+              overflow: 'hidden',
+              maxHeight: 'none'
             }}
-            disabled={addRowMutation.isPending}
-            className="px-3 py-1 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            title="Add a new row"
           >
-            {addRowMutation.isPending ? "Adding..." : "+"}
-          </button>
+            {Array.from({ length: skeletonRows }).map((_, r) => (
+              <div key={r} className="absolute top-0 left-0 w-full" style={{ height: `${ROW_HEIGHT}px`, transform: `translateY(${r * ROW_HEIGHT}px)` }}>
+                <div className="h-9 border-b border-gray-200 flex bg-[#ffffff]">
+                  <div className="flex items-center justify-center" style={{ width: '80px' }}>
+                    <div className="h-3 w-5 bg-gray-200 rounded animate-pulse" />
+                  </div>
+                  {Array.from({ length: skeletonCols }).map((_, c) => (
+                    <div key={c} className="flex items-center" style={{ width: '192px', minWidth: '192px', maxWidth: '192px', borderRight: '1px solid #e5e7eb' }}>
+                      <div className="px-2 py-1 w-full">
+                        <div className="h-3 w-32 bg-gray-200 rounded animate-pulse" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+          {/* Add row button skeleton */}
+          <div 
+            className="border border-gray-200 border-t-0 bg-[#ffffff] h-9 flex items-center"
+            style={{ width: `${80 + skeletonCols * 192}px` }}
+          >
+            <div className="flex items-center justify-center w-20 h-full">
+              <div className="h-3 w-3 bg-gray-200 rounded-full animate-pulse" />
+            </div>
+            <div className="flex-1 h-full"></div>
+          </div>
         </div>
       </div>
     );
@@ -1704,6 +1728,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
              const row = indexToRow.get(rowIndex);
              
              if (!row) {
+               const visibleSkeletonCols = tableMeta?.columns?.filter(col => !isFieldHidden(col.id)).length ?? 3;
                return (
                  <div
                    key={virtualRow.index}
@@ -1713,8 +1738,25 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                      transform: `translateY(${virtualRow.start}px)`,
                    }}
                  >
-                   <div className="h-9 border-b border-gray-200 bg-gray-50 flex items-center justify-center text-gray-500">
-                     Loading row {rowIndex + 1}...
+                   <div className="h-9 border-b border-gray-200 bg-[#ffffff] flex items-stretch">
+                     {/* Row number (show actual index) */}
+                     <div className="flex items-center justify-center" style={{ width: '80px' }}>
+                       <div className="px-2 py-1 text-xs text-gray-500 font-mono">
+                         {rowIndex + 1}
+                       </div>
+                     </div>
+                     {/* Skeleton cells for visible columns */}
+                     {Array.from({ length: visibleSkeletonCols }).map((_, c) => (
+                       <div
+                         key={c}
+                         className="flex items-center"
+                         style={{ width: '192px', minWidth: '192px', maxWidth: '192px', borderRight: '1px solid #e5e7eb' }}
+                       >
+                         <div className="px-2 py-1 w-full">
+                           <div className="h-3 w-32 bg-gray-200 rounded animate-pulse" />
+                         </div>
+                       </div>
+                     ))}
                    </div>
                  </div>
                );
@@ -1958,7 +2000,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
        
        {/* Add row button */}
        <div 
-         className="border border-gray-200 border-t-0 bg-[#ffffff] h-9 flex items-center hover:bg-gray-100 cursor-pointer transition-colors"
+         className="border border-gray-200 border-l-0 border-t-0 bg-[#ffffff] h-9 flex items-center hover:bg-gray-100 cursor-pointer transition-colors"
                    style={{ width: `${80 + (tableMeta?.columns?.filter(col => !isFieldHidden(col.id)).length ?? 0) * 192}px` }}
          onClick={() => {
            if (!tableId) return;
