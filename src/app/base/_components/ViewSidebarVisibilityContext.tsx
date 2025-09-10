@@ -1,6 +1,7 @@
 "use client";
 
-import React, { createContext, useContext, useMemo, useState } from "react";
+import React, { createContext, useContext, useMemo, useState, useEffect } from "react";
+import { useTableContext } from "./TableContext";
 
 type ViewSidebarVisibilityContextValue = {
   isViewSidebarVisible: boolean;
@@ -12,6 +13,12 @@ const ViewSidebarVisibilityContext = createContext<ViewSidebarVisibilityContextV
 
 export function ViewSidebarVisibilityProvider({ children }: { children: React.ReactNode }) {
   const [isViewSidebarVisible, setViewSidebarVisible] = useState(true);
+  const { selectedTableId } = useTableContext();
+
+  // Reset to visible whenever the selected table changes
+  useEffect(() => {
+    setViewSidebarVisible(true);
+  }, [selectedTableId]);
 
   const value = useMemo(
     () => ({
