@@ -1379,10 +1379,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
     columnResizeMode: "onChange",
   });
 
-  // Don't return null on loading - keep the table mounted to prevent layout collapse
-  // The loading state is handled by showing "Loading row..." placeholders in the rows
-
-  // Show skeleton table while schema for the new table/view is loading
+  // Skeleton table while schema for the new table/view is loading
   if (!tableMeta) {
     const skeletonCols = 3;
     const skeletonRows = 100;
@@ -1971,10 +1968,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
            </>
          )}
        </div>
-       
-                               {/* Status bar removed - no longer showing to users */}
-       
-       
+    
       </div>
 
       {/* Column Context Menu */}

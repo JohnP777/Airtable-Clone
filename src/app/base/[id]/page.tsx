@@ -31,12 +31,12 @@ export default async function BasePage({ params, }: { params: Promise<{ id: stri
                 <LoadedRowsProvider>
                 <ViewSidebarVisibilityProvider>
                 <div className="min-h-screen bg-[#f6f8fc] relative overflow-hidden">
-                  {/* Fixed Base Header */}
+                  {/* Base Header */}
                   <div className="fixed top-0 left-0 right-0 z-50 bg-[#f6f8fc]">
                     <BaseHeader baseId={id} />
                   </div>
                   
-                  {/* Fixed Secondary banner with table buttons */}
+                  {/* Secondary Header */}
                   <div className="fixed top-12 left-0 right-0 z-40 bg-[#f6f8fc]">
                     <div className="h-10 bg-[#fff4dc] border-b border-gray-200 flex items-center justify-between">
                       <div className="ml-12 px-2 pt-2">
@@ -51,7 +51,7 @@ export default async function BasePage({ params, }: { params: Promise<{ id: stri
                     </div>
                   </div>
                   
-                  {/* Fixed Third header bar with Filter/Sort buttons */}
+                  {/* Third header */}
                   <div className="fixed top-22 left-0 right-0 z-30 bg-[#f6f8fc]">
                     <div className="h-12 bg-[#ffffff] border-b border-gray-200 flex items-center justify-between">
                       <div className="flex items-center space-x-2 pl-18">
@@ -73,14 +73,14 @@ export default async function BasePage({ params, }: { params: Promise<{ id: stri
                     </div>
                   </div>
                   
-                  {/* Main content area with fixed sidebars */}
+                  {/* Main content area with sidebars */}
                   <div className="flex" style={{ marginTop: '132px' }}>
-                    {/* Fixed Left Sidebar - now overlapping everything */}
+                    {/* Bases page left sidebar */}
                     <div className="fixed top-0 left-0 bottom-0 z-[999] bg-[#f6f8fc] w-14">
                       <BaseSidebar />
                     </div>
                     
-                    {/* Content area with fixed right sidebar */}
+                    {/* Content area with views sidebar */}
                     <div className="flex flex-1 overflow-hidden">
                       <BaseContent baseId={id} />
                     </div>

@@ -263,30 +263,6 @@ export const tableRouter = createTRPCRouter({
       return view;
     }),
 
-  updateHiddenFields: protectedProcedure
-    .input(z.object({
-      viewId: z.string(),
-      tableId: z.string(),
-      hiddenFieldIds: z.array(z.string()),
-    }))
-    .mutation(async ({ ctx, input }) => {
-      const view = await ctx.db.view.findFirst({
-        where: {
-          id: input.viewId,
-          tableId: input.tableId,
-          table: { base: { createdById: ctx.session.user.id } },
-        },
-        select: { id: true },
-      });
-      if (!view) throw new Error("View not found");
-
-      await ctx.db.view.update({
-        where: { id: view.id },
-        data: { hiddenFields: input.hiddenFieldIds },
-      });
-      return { success: true };
-    }),
-
   // Get persisted state for a view (for hydrating contexts)
   getViewState: protectedProcedure
     .input(z.object({ viewId: z.string() }))
@@ -375,7 +351,7 @@ export const tableRouter = createTRPCRouter({
       return { ok: true };
     }),
 
-  // Set hidden fields for a view (replaces the old updateHiddenFields)
+  // Set hidden fields for a view 
   setHiddenFields: protectedProcedure
     .input(z.object({ viewId: z.string(), hiddenFieldIds: z.array(z.string()) }))
     .mutation(async ({ ctx, input }) => {
@@ -384,62 +360,6 @@ export const tableRouter = createTRPCRouter({
         data: { hiddenFields: input.hiddenFieldIds, updatedAt: new Date() },
       });
       return { ok: true };
-    }),
-
-  applySort: protectedProcedure
-    .input(z.object({
-      tableId: z.string(),
-      viewId: z.string(),
-      sortRules: z.array(z.object({
-        columnId: z.string(),
-        direction: z.enum(["asc", "desc"])
-      }))
-    }))
-    .mutation(async ({ ctx, input }) => {
-      let view = await ctx.db.view.findFirst({
-        where: {
-          id: input.viewId,
-          tableId: input.tableId,
-          table: { base: { createdById: ctx.session.user.id } }
-        },
-        select: { id: true }
-      });
-      if (!view) {
-        view = await ctx.db.view.findFirst({
-          where: {
-            tableId: input.tableId,
-            table: { base: { createdById: ctx.session.user.id } }
-          },
-          select: { id: true }
-        });
-        if (!view) {
-          const created = await ctx.db.view.create({
-            data: { tableId: input.tableId, name: "Grid view", type: "grid", order: 0 },
-            select: { id: true }
-          });
-          view = created;
-        }
-      }
-
-      await ctx.db.$transaction(async (tx) => {
-        await tx.viewSortRule.deleteMany({ where: { viewId: view!.id } });
-        if (input.sortRules.length) {
-          await tx.viewSortRule.createMany({
-            data: input.sortRules.map((r, i) => ({
-              viewId: view!.id,
-              columnId: r.columnId,
-              direction: r.direction,
-              order: i
-            }))
-          });
-        }
-      });
-
-      return {
-        success: true,
-        sortRules: input.sortRules,
-        message: "Sort rules saved to view"
-      };
     }),
 
   createTable: protectedProcedure
@@ -831,98 +751,6 @@ export const tableRouter = createTRPCRouter({
       return { success: true };
     }),
 
-  //Used for adding 10k rows (not used anymore)
-  addBulkRows: protectedProcedure
-    .input(z.object({ 
-      tableId: z.string(),
-      rowCount: z.number().min(1).max(10000)
-    }))
-    .mutation(async ({ ctx, input }) => {
-      // Verify user owns the table
-      const table = await ctx.db.table.findFirst({
-        where: { 
-          id: input.tableId,
-          base: { createdById: ctx.session.user.id }
-        },
-        include: { 
-          columns: { orderBy: { order: "asc" } }
-        }
-      });
-
-      if (!table) {
-        throw new Error("Table not found");
-      }
-
-      const currentRowCount = await ctx.db.tableRow.count({ where: { tableId: input.tableId } });
-      const startOrder = currentRowCount;
-
-      // Generate fake data for existing columns
-      const fakeData = generateFakeDataForColumns(table.columns, input.rowCount);
-
-      // Use a single transaction for better performance
-      const result = await ctx.db.$transaction(async (tx) => {
-        // Create all rows at once
-        const rowData = fakeData.map((row, index) => ({
-          tableId: input.tableId,
-          order: startOrder + index
-        }));
-
-        await tx.tableRow.createMany({
-          data: rowData
-        });
-
-        // Get all created row IDs in one query
-        const createdRows = await tx.tableRow.findMany({
-          where: { 
-            tableId: input.tableId,
-            order: { gte: startOrder }
-          },
-          select: { id: true, order: true },
-          orderBy: { order: "asc" }
-        });
-
-        // Prepare all cell data in memory
-        const allCellData = [];
-        for (let i = 0; i < fakeData.length; i++) {
-          const row = fakeData[i];
-          const rowId = createdRows[i]?.id;
-          if (!rowId || !row) continue;
-
-          for (let j = 0; j < table.columns.length; j++) {
-            const column = table.columns[j];
-            if (!column) continue;
-            
-            const cellValue = row.cells[j]?.value ?? '';
-            
-            allCellData.push({
-              tableId: input.tableId,
-              rowId: rowId,
-              columnId: column.id,
-              value: cellValue
-            });
-          }
-        }
-
-        // Create all cells in batches of 1000 for optimal performance
-        const cellBatchSize = 1000;
-        for (let i = 0; i < allCellData.length; i += cellBatchSize) {
-          const batch = allCellData.slice(i, i + cellBatchSize);
-          await tx.tableCell.createMany({
-            data: batch,
-            skipDuplicates: true // Skip if unique constraint violation
-          });
-        }
-
-        return { createdRows: createdRows.length, cellData: allCellData.length };
-      });
-
-      return { 
-        success: true, 
-        addedRows: result.createdRows,
-        totalRows: currentRowCount + result.createdRows,
-        cellsCreated: result.cellData
-      };
-    }),
 
   // Fast bulk row addition using optimized batching
   // Optimized for large datasets with stable transaction handling

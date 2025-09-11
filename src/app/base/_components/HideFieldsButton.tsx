@@ -159,7 +159,7 @@ export function HideFieldsButton({ tableId }: HideFieldsButtonProps) {
                )}
              </div>
 
-                         {/* Action Buttons */}
+             {/* Action Buttons */}
              <div className="flex space-x-2">
                <button
                  onClick={handleHideAll}
@@ -178,7 +178,7 @@ export function HideFieldsButton({ tableId }: HideFieldsButtonProps) {
         </div>
       )}
       
-      {/* Click outside to close dropdown */}
+      {/* Clicking anywhere outside the dropdown closes it */}
       {showDropdown && (
         <div 
           className="fixed inset-0 z-40" 

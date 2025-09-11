@@ -45,7 +45,7 @@ export function BaseSidebar() {
         </button>
       </div>
 
-      {/* Bottom icons - positioned at the bottom */}
+      {/* Icons at bottom of sidebar */}
       <div className="absolute bottom-0 left-0 right-0">
         {/* Question mark icon */}
         <div className="px-3 pb-2">
