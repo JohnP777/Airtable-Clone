@@ -36,20 +36,21 @@ export function FilterProvider({ children }: FilterProviderProps) {
   const { currentViewId } = useView();
   const { selectedTableId } = useTableContext();
   const utils = api.useUtils();
-  const [byView, setByView] = useState<Record<string, FilterRule[]>>({});
-  const [hydratedViews, setHydratedViews] = useState<Record<string, boolean>>({});
+  const [byView, setByView] = useState<Record<string, FilterRule[]>>({}); //Mapping of views to filter rules
+  const [hydratedViews, setHydratedViews] = useState<Record<string, boolean>>({}); // Chcecks to see if we have loaded data for a view
 
   const viewId = currentViewId;
-  const hasView = !!viewId;
+  const hasView = !!viewId; // Check if valid view (not null/undefined)
   const { data } = api.table.getViewState.useQuery(
     { viewId: viewId! },
     { 
       enabled: hasView, // fetch persisted state only when we have a real viewId
-      retry: false, // don't retry if it fails
-      staleTime: 5 * 60 * 1000, // 5 minutes - view state doesn't change often
-      refetchOnWindowFocus: false, // don't refetch on window focus
+      retry: false, 
+      staleTime: 5 * 60 * 1000, // 5 minutes 
+      refetchOnWindowFocus: false,
     }
-  );
+  ); // Returns hiddenfields, sortrules, filterrules
+
   const setRulesMutation = api.table.setFilterRules.useMutation({
     onMutate: async ({ viewId, rules }) => {
       // Store previous rules for rollback
@@ -59,7 +60,7 @@ export function FilterProvider({ children }: FilterProviderProps) {
       return { previousRules };
     },
     onError: (err, { viewId }, context) => {
-      // Roll back context
+      // Roll back context on error 
       if (context?.previousRules) {
         setByView(prev => ({ ...prev, [viewId]: context.previousRules }));
       }
@@ -78,7 +79,7 @@ export function FilterProvider({ children }: FilterProviderProps) {
   useEffect(() => {
     if (!viewId) return;
     if (data) setByView(prev => ({ ...prev, [viewId]: data.filterRules ?? [] }));
-    setHydratedViews(prev => ({ ...prev, [viewId]: true })); // <-- ensure true even with empty data
+    setHydratedViews(prev => ({ ...prev, [viewId]: true })); // ensure true even with empty data
   }, [viewId, data]);
 
   const filterRules = byView[viewId ?? ''] ?? [];
@@ -87,7 +88,7 @@ export function FilterProvider({ children }: FilterProviderProps) {
 
   const setFilterRules = (rules: FilterRule[]) => {
     if (!hasView) return;
-    setByView(prev => ({ ...prev, [viewId!]: rules }));
+    setByView(prev => ({ ...prev, [viewId!]: rules })); //Optimistic update
     setRulesMutation.mutate({ viewId: viewId!, rules });
   };
 

@@ -3,7 +3,7 @@
 import React from "react";
 import { useViewSidebarVisibility } from "./ViewSidebarVisibilityContext";
 
-export function BurgerToggleButton() {
+export function ViewsSidebarToggleButton() {
   const { toggleViewSidebar } = useViewSidebarVisibility();
   return (
     <button onClick={toggleViewSidebar} className="flex items-center justify-center w-8 h-8 rounded hover:bg-gray-100 transition-colors">

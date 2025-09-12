@@ -14,14 +14,13 @@ export function TableButtons({ baseId, onTableSelect, selectedTableId }: TableBu
   const { data: tables, isLoading } = api.table.list.useQuery({ baseId });
   const utils = api.useUtils();
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
-  const [editingTableId, setEditingTableId] = useState<string | null>(null);
-  const [deletingTableId, setDeletingTableId] = useState<string | null>(null);
+  const [editingTableId, setEditingTableId] = useState<string | null>(null); // Used to open renaming dropdown for existing table
+  const [deletingTableId, setDeletingTableId] = useState<string | null>(null); // Used to open delete dropdown for existing table 
   const [showAddTableDropdown, setShowAddTableDropdown] = useState(false);
-  const [newTableName, setNewTableName] = useState("");
-  const [recordName, setRecordName] = useState("Record");
-  const [tempTableName, setTempTableName] = useState("");
-  const [newlyCreatedTableId, setNewlyCreatedTableId] = useState<string | null>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [newTableName, setNewTableName] = useState(""); // Renaming existing table
+  const [tempTableName, setTempTableName] = useState(""); // Naming new table
+  const [newlyCreatedTableId, setNewlyCreatedTableId] = useState<string | null>(null); // Used for instant renaming of new table
+  const dropdownRef = useRef<HTMLDivElement>(null); //Used to close dropdown when clicked outside
   const addTableRef = useRef<HTMLDivElement>(null);
   
   const createTableMutation = api.table.createTable.useMutation({
@@ -58,12 +57,12 @@ export function TableButtons({ baseId, onTableSelect, selectedTableId }: TableBu
     },
   });
 
+  // Renaming existing table
   const renameTableMutation = api.table.renameTable.useMutation({
     onSuccess: () => {
       void utils.table.list.invalidate({ baseId });
       setEditingTableId(null);
       setNewTableName("");
-      setRecordName("Record");
       setOpenDropdown(null);
     },
   });
@@ -89,6 +88,7 @@ export function TableButtons({ baseId, onTableSelect, selectedTableId }: TableBu
     setNewlyCreatedTableId(null);
   };
 
+  // Reset temptablename and newlycreatedtableid if not giving a custom name to new table
   const handleCancelNewTable = () => {
     setShowAddTableDropdown(false);
     setTempTableName("");
@@ -109,10 +109,10 @@ export function TableButtons({ baseId, onTableSelect, selectedTableId }: TableBu
     setDeletingTableId(tableId);
   };
 
+  // Begin renaming existing table
   const handleRenameTable = (tableId: string, currentName: string) => {
-    setEditingTableId(tableId);
-    setNewTableName(currentName);
-    setRecordName("Record");
+    setEditingTableId(tableId); //Marks this table as being edited, opens up dropdown for editing table name
+    setNewTableName(currentName); //Starts rename off with existing name
   };
 
   const handleConfirmDelete = () => {
@@ -137,7 +137,6 @@ export function TableButtons({ baseId, onTableSelect, selectedTableId }: TableBu
   const handleCancelRename = () => {
     setEditingTableId(null);
     setNewTableName("");
-    setRecordName("Record");
   };
 
   // Auto-select the first table when tables are loaded
@@ -147,7 +146,7 @@ export function TableButtons({ baseId, onTableSelect, selectedTableId }: TableBu
     }
   }, [tables, selectedTableId, onTableSelect]);
 
-  // Handle click outside to close dropdown
+  // Handle click outside to close renaming dropdowns
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -155,8 +154,7 @@ export function TableButtons({ baseId, onTableSelect, selectedTableId }: TableBu
         setEditingTableId(null);
         setDeletingTableId(null);
         setNewTableName("");
-        setRecordName("Record");
-      }
+      } //close renaming dropdown for new table
       if (addTableRef.current && !addTableRef.current.contains(event.target as Node)) {
         setShowAddTableDropdown(false);
         setTempTableName("");
@@ -176,20 +174,20 @@ export function TableButtons({ baseId, onTableSelect, selectedTableId }: TableBu
 
   return (
     <div className="flex items-center space-x-2" ref={dropdownRef}>
-        {tables?.map((table, index) => (
+        {tables?.map((table, index) => ( //Loop through all tables and create a div block for each one 
         <div key={table.id} className="relative">
           <div
             className={`flex items-center ${index === 0 ? 'pl-4' : 'pl-2'} pr-1 py-3 text-[13px] cursor-pointer ${
               selectedTableId === table.id
-                ? "text-black font-semibold bg-white rounded-t-lg -mb-px"
-                : "text-gray-700 hover:text-gray-900"
+                ? "text-black font-semibold bg-white rounded-t-lg -mb-px" //White box if selected
+                : "text-gray-700 hover:text-gray-900" // No background box, gray text if not selected
             }`}
             style={{ fontFamily: 'Mundo Sans Regular, sans-serif' }}
             onClick={() => handleTableSelect(table.id)}
-          >
+          > 
             <span className="flex-1 text-left">{table.name}</span>
             {selectedTableId === table.id && (
-              <div
+              <div //Button to open dropdown on a table
                 role="button"
                 tabIndex={0}
                 onClick={(e) => {
@@ -212,11 +210,11 @@ export function TableButtons({ baseId, onTableSelect, selectedTableId }: TableBu
             )}
           </div>
           
-          {/* Dropdown Menu */}
+          {/* Table Dropdown Menu */}
           {openDropdown === table.id && (
             <div className={`absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-[9999] ${editingTableId === table.id ? 'w-80' : deletingTableId === table.id ? 'w-64' : 'w-48'}`}>
               {editingTableId === table.id ? (
-                // Rename form
+                // Rename form dropdown (if there is an editingtableID)
                 <div className="p-4">
                   <div className="mb-4">
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -257,7 +255,8 @@ export function TableButtons({ baseId, onTableSelect, selectedTableId }: TableBu
                   </div>
                 </div>
               ) : deletingTableId === table.id ? (
-                // Delete confirmation
+                
+                // Delete confirmation form if a deletingTableID exists
                 <div className="p-3">
                   <h2 className="text-sm font-semibold text-gray-900 mb-2">
                     Are you sure you want to delete this table?
@@ -290,7 +289,7 @@ export function TableButtons({ baseId, onTableSelect, selectedTableId }: TableBu
                   </div>
                 </div>
               ) : (
-                // Regular dropdown menu
+                // Else regular dropdown menu
                 <div className="py-1">
                   <button 
                     onClick={() => handleRenameTable(table.id, table.name)}
@@ -329,7 +328,7 @@ export function TableButtons({ baseId, onTableSelect, selectedTableId }: TableBu
           <span>{createTableMutation.isPending ? "Creating..." : "Add or import"}</span>
         </button>
 
-        {/* Add Table Dropdown */}
+        {/* Add Table Dropdown (for renaming new table) */}
         {showAddTableDropdown && (
           <div className="absolute top-full left-0 transform -translate-x-40 mt-1 w-64 bg-white border border-gray-200 rounded-md shadow-lg z-[9999]">
             <div className="p-3">
@@ -362,7 +361,7 @@ export function TableButtons({ baseId, onTableSelect, selectedTableId }: TableBu
                   Cancel
                 </button>
                 <button
-                  onClick={handleSaveNewTable}
+                  onClick={handleSaveNewTable} //Save custom name for new table
                   disabled={createTableMutation.isPending}
                   className="px-3 py-1.5 bg-blue-600 text-white text-xs rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >

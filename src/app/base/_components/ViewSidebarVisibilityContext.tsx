@@ -11,6 +11,12 @@ type ViewSidebarVisibilityContextValue = {
 
 const ViewSidebarVisibilityContext = createContext<ViewSidebarVisibilityContextValue | null>(null);
 
+export function useViewSidebarVisibility() {
+  const ctx = useContext(ViewSidebarVisibilityContext);
+  if (!ctx) throw new Error("useViewSidebarVisibility must be used within ViewSidebarVisibilityProvider");
+  return ctx;
+}
+
 export function ViewSidebarVisibilityProvider({ children }: { children: React.ReactNode }) {
   const [isViewSidebarVisible, setViewSidebarVisible] = useState(true);
   const { selectedTableId } = useTableContext();
@@ -36,10 +42,6 @@ export function ViewSidebarVisibilityProvider({ children }: { children: React.Re
   );
 }
 
-export function useViewSidebarVisibility() {
-  const ctx = useContext(ViewSidebarVisibilityContext);
-  if (!ctx) throw new Error("useViewSidebarVisibility must be used within ViewSidebarVisibilityProvider");
-  return ctx;
-}
+
 
 

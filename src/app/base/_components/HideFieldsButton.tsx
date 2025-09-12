@@ -13,11 +13,12 @@ interface HideFieldsButtonProps {
 export function HideFieldsButton({ tableId }: HideFieldsButtonProps) {
   const [showDropdown, setShowDropdown] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const searchInputRef = useRef<HTMLInputElement>(null);
   const { isFieldHidden, toggleFieldHidden, setHiddenFields, hiddenFieldIds } = useHiddenFields();
   const { currentViewId } = useView();
 
-  // Get table data to show available columns - use paginated version with minimal data
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Get table data to show available columns 
   const { data: tableData } = api.table.getTableDataPaginated.useQuery(
     { 
       tableId,
@@ -123,12 +124,12 @@ export function HideFieldsButton({ tableId }: HideFieldsButtonProps) {
                            checked={!isFieldHidden(field.id)}
                            onChange={() => handleFieldToggle(field.id)}
                          />
-                         <div
+                         <div // Switch change colour
                            className={`block w-8 h-5 rounded-full transition-colors duration-200 ease-in-out ${
                              !isFieldHidden(field.id) ? "bg-green-500" : "bg-gray-300"
                            }`}
                          ></div>
-                         <div
+                         <div //Switch UI slider
                            className={`dot absolute left-0.5 top-0.5 bg-white w-3.5 h-3.5 rounded-full transition-transform duration-200 ease-in-out ${
                              !isFieldHidden(field.id) ? "translate-x-full" : ""
                            }`}
@@ -159,7 +160,7 @@ export function HideFieldsButton({ tableId }: HideFieldsButtonProps) {
                )}
              </div>
 
-             {/* Action Buttons */}
+             {/* Hide all / Show all buttons */}
              <div className="flex space-x-2">
                <button
                  onClick={handleHideAll}

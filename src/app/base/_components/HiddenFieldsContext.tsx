@@ -26,12 +26,12 @@ interface HiddenFieldsProviderProps {
 
 export function HiddenFieldsProvider({ children }: HiddenFieldsProviderProps) {
   const { currentViewId } = useView();
-  const utils = api.useUtils();
-  const viewId = currentViewId;
-  const hasView = !!viewId;
   const [byView, setByView] = useState<Record<string, Set<string>>>({});
   const [hydratedViews, setHydratedViews] = useState<Record<string, boolean>>({});
+  const utils = api.useUtils();
 
+  const viewId = currentViewId;
+  const hasView = !!viewId;
   const { data } = api.table.getViewState.useQuery(
     { viewId: viewId! }, 
     { 
@@ -39,6 +39,8 @@ export function HiddenFieldsProvider({ children }: HiddenFieldsProviderProps) {
       retry: false,
     }
   );
+
+  // Save hidden fields
   const saveMutation = api.table.setHiddenFields.useMutation({
     onSuccess: () => void utils.table.getTableDataPaginated.invalidate(),
   });
@@ -59,9 +61,9 @@ export function HiddenFieldsProvider({ children }: HiddenFieldsProviderProps) {
     }
   }, [viewId, data]);
 
-  const hiddenSet = byView[viewId ?? ''] ?? new Set<string>();
+  const hiddenSet = byView[viewId ?? ''] ?? new Set<string>(); //Hidden fields for the current view
   const hiddenFieldIds = Array.from(hiddenSet);
-  const hydrated = !!hydratedViews[viewId ?? ''];
+  const hydrated = !!hydratedViews[viewId ?? '']; //Whether view's hidden fields have been fetched from backend
 
   const persist = (set: Set<string>) => {
     if (!hasView) return;
@@ -70,13 +72,13 @@ export function HiddenFieldsProvider({ children }: HiddenFieldsProviderProps) {
 
   const setHiddenFields = (ids: string[]) => {
     const set = new Set(ids);
-    setByView(prev => ({ ...prev, [viewId!]: set }));
-    persist(set);
+    setByView(prev => ({ ...prev, [viewId!]: set })); //Optimistically update
+    persist(set); //sync with backend
   };
 
   const toggleFieldHidden = (id: string) => {
     const set = new Set(hiddenSet);
-    set.has(id) ? set.delete(id) : set.add(id);
+    set.has(id) ? set.delete(id) : set.add(id); //Flips a field's hidden/shown state
     setByView(prev => ({ ...prev, [viewId!]: set }));
     persist(set);
   };

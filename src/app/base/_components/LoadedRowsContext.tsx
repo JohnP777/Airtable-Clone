@@ -25,6 +25,14 @@ interface LoadedRowsContextType {
 
 const LoadedRowsContext = createContext<LoadedRowsContextType | undefined>(undefined);
 
+export function useLoadedRows() {
+  const context = useContext(LoadedRowsContext);
+  if (context === undefined) {
+    throw new Error("useLoadedRows must be used within a LoadedRowsProvider");
+  }
+  return context;
+}
+
 export function LoadedRowsProvider({ children }: { children: ReactNode }) {
   const [loadedRows, setLoadedRows] = useState<LoadedRow[]>([]);
 
@@ -53,11 +61,5 @@ export function LoadedRowsProvider({ children }: { children: ReactNode }) {
   );
 }
 
-export function useLoadedRows() {
-  const context = useContext(LoadedRowsContext);
-  if (context === undefined) {
-    throw new Error("useLoadedRows must be used within a LoadedRowsProvider");
-  }
-  return context;
-}
+
 

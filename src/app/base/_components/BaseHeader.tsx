@@ -27,7 +27,7 @@ export function BaseHeader({ baseId }: BaseHeaderProps) {
       // Snapshot the previous value
       const previousBase = utils.base.getById.getData({ id: baseId });
       
-      // Optimistically update to the new value
+      // Optimistically update cache of the query to the new value
       utils.base.getById.setData({ id: baseId }, (old) => {
         if (!old) return old;
         return { ...old, name: newData.name };
@@ -44,7 +44,7 @@ export function BaseHeader({ baseId }: BaseHeaderProps) {
       console.error("Failed to rename base:", err);
     },
     onSettled: () => {
-      // Always refetch after error or success to ensure server state
+      // Always refetch after error or success to ensure backend and frontend are synced
       void utils.base.getById.invalidate({ id: baseId });
       void utils.base.getRecent.invalidate();
     },
@@ -125,7 +125,7 @@ export function BaseHeader({ baseId }: BaseHeaderProps) {
                   {/* Header with base name and actions */}
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center flex-1">
-                      {isEditingName ? (
+                      {isEditingName ? ( //Input bar when editing name
                         <input
                           type="text"
                           value={editingName}
@@ -150,6 +150,7 @@ export function BaseHeader({ baseId }: BaseHeaderProps) {
                         </button>
                       )}
                     </div>
+                     {/* Icons next to rename input bar */}
                     <div className="flex items-center space-x-2">
                       <button className="p-1.5 hover:bg-gray-100 rounded">
                         <svg className="h-4 w-4 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -199,7 +200,7 @@ export function BaseHeader({ baseId }: BaseHeaderProps) {
           </div>
         </div>
         
-        {/* Center - Navigation tabs */}
+        {/* Center navigation buttons (no functionality) */}
         <div className="flex items-center space-x-4 h-full justify-center flex-1 ml-32">
           <div className="relative">
             <button className="font-semibold text-gray-900" style={{ fontSize: '13px' }}>
@@ -218,9 +219,9 @@ export function BaseHeader({ baseId }: BaseHeaderProps) {
           </button>
         </div>
 
-        {/* Right side - Action buttons */}
+        {/* Right side buttons (no functionality) */}
         <div className="flex items-center space-x-2 pr-12">
-          {/* 12.PNG button */}
+          {/* Timer button */}
           <button className="flex items-center justify-center w-8 h-8 rounded hover:bg-gray-100 transition-colors">
             <Image src="/12.PNG" alt="Refresh" width={20} height={20} />
           </button>

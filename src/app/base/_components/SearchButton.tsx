@@ -34,6 +34,14 @@ export function SearchButton() {
     setSearchTerm(e.target.value);
   };
 
+  // Clear search when dropdown is closed in any way
+  const handleDropdownClose = () => {
+    if (isDropdownOpen) {
+      clearSearch();
+    }
+    closeDropdown();
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Escape") {
       handleDropdownClose();
@@ -45,13 +53,6 @@ export function SearchButton() {
     clearSearch();
   };
 
-  // Clear search when dropdown is closed in any way
-  const handleDropdownClose = () => {
-    if (isDropdownOpen) {
-      clearSearch();
-    }
-    closeDropdown();
-  };
 
   return (
     <div className="relative">
@@ -81,7 +82,7 @@ export function SearchButton() {
                 />
               </div>
               
-              {/* Close Button */}
+              {/* Close Search 'x' button */}
               <button
                 onClick={handleClose}
                 className="p-1 text-gray-400 hover:text-gray-600"
@@ -112,7 +113,7 @@ export function SearchButton() {
         </div>
       )}
       
-      {/* Click outside to close dropdown */}
+      {/* Clicking anywhere outside dropdown closes it */}
       {isDropdownOpen && (
         <div 
           className="fixed inset-0 z-40" 

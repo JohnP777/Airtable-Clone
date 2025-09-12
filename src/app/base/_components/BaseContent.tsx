@@ -23,7 +23,7 @@ export function BaseContent({ baseId }: BaseContentProps) {
 
   return (
     <div className="w-full h-full flex">
-      {/* Views sidebar */}
+      {/* Renders views sidebar if its toggled on (default on) */}
       {isViewSidebarVisible && (
         <div className="w-70 shrink-0 border-r border-gray-200 bg-white fixed left-14 top-28 bottom-0 z-10">
           <ViewSidebar tableId={selectedTable?.id ?? ""} />

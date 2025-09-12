@@ -11,6 +11,14 @@ interface TableContextType {
 
 const TableContext = createContext<TableContextType | undefined>(undefined);
 
+export function useTableContext() {
+  const context = useContext(TableContext);
+  if (context === undefined) {
+    throw new Error("useTableContext must be used within a TableProvider");
+  }
+  return context;
+}
+
 interface TableProviderProps {
   children: ReactNode;
   baseId: string;
@@ -27,6 +35,7 @@ export function TableProvider({ children, baseId }: TableProviderProps) {
     }
   }, [tables, selectedTableId]);
 
+  // Change selected table
   const handleSetSelectedTableId = (tableId: string) => {
     setSelectedTableId(tableId);
   };
@@ -38,10 +47,4 @@ export function TableProvider({ children, baseId }: TableProviderProps) {
   );
 }
 
-export function useTableContext() {
-  const context = useContext(TableContext);
-  if (context === undefined) {
-    throw new Error("useTableContext must be used within a TableProvider");
-  }
-  return context;
-}
+

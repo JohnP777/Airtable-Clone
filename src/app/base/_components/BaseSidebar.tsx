@@ -31,7 +31,7 @@ export function BaseSidebar() {
       className="fixed top-0 left-0 bottom-0 z-[999] w-14 border-r border-gray-200 bg-white/80 backdrop-blur-sm"
       aria-label="Base Sidebar"
     >
-      {/* Home button in top left corner */}
+      {/* Home button */}
       <div className="p-3">
         <Link href="/" className="flex items-center justify-center w-8 h-8 rounded hover:bg-gray-100 transition-colors">
           <Image src="/10.PNG" alt="Home" width={26} height={26} />
@@ -67,7 +67,7 @@ export function BaseSidebar() {
             className={`flex items-center justify-center w-8 h-8 rounded hover:bg-gray-100 transition-colors ${
               isProfileDropdownOpen ? 'bg-gray-100' : ''
             }`}
-            onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
+            onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)} //Toggle profile button dropdown
           >
             <Image src="/profile.svg" alt="Profile" width={28} height={28} />
           </button>

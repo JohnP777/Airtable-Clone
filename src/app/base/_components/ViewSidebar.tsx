@@ -15,7 +15,7 @@ export function ViewSidebar({ tableId }: ViewSidebarProps) {
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const [editingViewId, setEditingViewId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null); //View dropdown menu
 
   // Click outside to close dropdown
   useEffect(() => {
@@ -36,7 +36,7 @@ export function ViewSidebar({ tableId }: ViewSidebarProps) {
   const handleRenameView = (viewId: string, currentName: string) => {
     setEditingViewId(viewId);
     setEditingName(currentName);
-    setOpenDropdownId(null);
+    setOpenDropdownId(null); //Close dropdown
   };
 
   const handleSaveRename = async () => {
@@ -89,7 +89,7 @@ export function ViewSidebar({ tableId }: ViewSidebarProps) {
         <span className="truncate">Create new...</span>
       </button>
       
-      {/* Search bar */}
+      {/* Search bar (functionality not implemented) */}
       <div className="relative mb-3">
         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
           <svg className="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -126,8 +126,8 @@ export function ViewSidebar({ tableId }: ViewSidebarProps) {
                   ? "bg-gray-100 text-gray-900" 
                   : "hover:bg-gray-100 text-gray-900"
               }`}
-            >
-              <svg className="h-4 w-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            >  {/* Grid view icon */}
+              <svg className="h-4 w-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"> 
                 <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="1.5"/>
                 <line x1="3" y1="9" x2="21" y2="9" stroke="currentColor" strokeWidth="1.5"/>
                 <line x1="3" y1="15" x2="21" y2="15" stroke="currentColor" strokeWidth="1.5"/>
@@ -157,7 +157,7 @@ export function ViewSidebar({ tableId }: ViewSidebarProps) {
                 <span className="truncate font-medium flex-1">{view.name}</span>
               )}
               
-              {/* Triple dot icon - always present but controlled by opacity */}
+              {/* Triple dot icon (low opacity when not hovered) - opens view dropdown */}
               <button
                 onClick={(e) => {
                   e.stopPropagation();

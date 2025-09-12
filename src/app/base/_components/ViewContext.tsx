@@ -24,14 +24,17 @@ export const useView = () => {
 export function ViewProvider({ baseId, children }: { baseId: string; children: React.ReactNode }) {
   const utils = api.useUtils();
   const { selectedTableId } = useTableContext();
+  const [currentViewId, setCurrentViewId] = useState<string | null>(null);
 
   const list = api.table.listViews.useQuery(
     { tableId: selectedTableId! },
-    { enabled: !!selectedTableId }
+    { enabled: !!selectedTableId } //Runs if selected table ID exists
   );
 
+  // Setting up mutations
   const create = api.table.createView.useMutation();
   const rename = api.table.renameView.useMutation();
+  const duplicate = api.table.duplicateView.useMutation();
   const deleteView = api.table.deleteView.useMutation({
     onMutate: async ({ viewId }) => {
       // Optimistically update the view list to remove the view
@@ -45,13 +48,11 @@ export function ViewProvider({ baseId, children }: { baseId: string; children: R
       void utils.table.listViews.invalidate({ tableId: selectedTableId! });
     },
   });
-  const duplicate = api.table.duplicateView.useMutation();
-  const [currentViewId, setCurrentViewId] = useState<string | null>(null);
 
-  // reset view when table changes
+  // Reset view when table changes
   useEffect(() => { setCurrentViewId(null); }, [selectedTableId]);
 
-  // initialize to first view when views load
+  // Initialize to first view when views load
   useEffect(() => {
     if (!currentViewId && list.data?.[0]) setCurrentViewId(list.data[0].id);
   }, [list.data, currentViewId]);

@@ -32,18 +32,18 @@ export function SortProvider({ children }: SortProviderProps) {
   const { selectedTableId } = useTableContext();
   const [byView, setByView] = useState<Record<string, SortRule[]>>({});
   const [hydratedViews, setHydratedViews] = useState<Record<string, boolean>>({});
+  const utils = api.useUtils();
 
   const viewId = currentViewId;
-  const hasView = !!viewId;
+  const hasView = !!viewId; // Check if valid view (not null/undefined)
   const { data } = api.table.getViewState.useQuery(
     { viewId: viewId! },
     { 
       enabled: hasView, // fetch persisted state only when we have a real viewId
-      retry: false, // don't retry if it fails
+      retry: false, 
     }
   );
 
-  const utils = api.useUtils();
   const setSortRulesMutation = api.table.setSortRules.useMutation({
     onMutate: async ({ viewId, sortRules }: { viewId: string; sortRules: SortRule[] }) => {
       // Store previous rules for rollback
@@ -70,7 +70,7 @@ export function SortProvider({ children }: SortProviderProps) {
     },
   });
 
-  // hydrate on load / view change
+  // Hydrate on load / view change
   useEffect(() => {
     if (!viewId) return;
     if (data) setByView(prev => ({ ...prev, [viewId]: data.sortRules ?? [] }));
@@ -80,11 +80,13 @@ export function SortProvider({ children }: SortProviderProps) {
   const sortRules = byView[currentViewId ?? ''] ?? [];
   const hydrated = !!hydratedViews[currentViewId ?? ''];
   const isSorting = setSortRulesMutation.isPending;
+
   const setSortRules = (rules: SortRule[]) => {
     if (!hasView) return;
-    setByView(prev => ({ ...prev, [viewId!]: rules }));
+    setByView(prev => ({ ...prev, [viewId!]: rules })); // Optimistic update, bit redundant though since already did in onMutate
     setSortRulesMutation.mutate({ viewId: viewId!, sortRules: rules });
   };
+
   const clearSortRules = () => {
     if (!hasView) return;
     setByView(prev => ({ ...prev, [viewId!]: [] }));

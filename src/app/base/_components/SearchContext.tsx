@@ -23,6 +23,14 @@ interface SearchContextType {
 
 const SearchContext = createContext<SearchContextType | undefined>(undefined);
 
+export function useSearchContext() {
+  const context = useContext(SearchContext);
+  if (context === undefined) {
+    throw new Error("useSearchContext must be used within a SearchProvider");
+  }
+  return context;
+}
+
 export function SearchProvider({ children }: { children: ReactNode }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -69,10 +77,3 @@ export function SearchProvider({ children }: { children: ReactNode }) {
   );
 }
 
-export function useSearchContext() {
-  const context = useContext(SearchContext);
-  if (context === undefined) {
-    throw new Error("useSearchContext must be used within a SearchProvider");
-  }
-  return context;
-}
