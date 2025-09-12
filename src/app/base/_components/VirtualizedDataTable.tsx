@@ -10,6 +10,8 @@ import {
   type Row,
 } from "@tanstack/react-table";
 import { useWindowVirtualizer } from "@tanstack/react-virtual";
+import { nanoid } from "nanoid";
+import { notifyManager } from "@tanstack/react-query";
 
 import { api } from "../../../trpc/react";
 import { useView } from "./ViewContext";
@@ -99,6 +101,27 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
   
   // Local state to track column names for immediate/optimistic updates
   const [localColumnNames, setLocalColumnNames] = useState<Record<string, string>>({});
+
+  // Phantom column helpers
+  const makeTempColumnId = () => `temp_${nanoid(6)}`;
+  const isTempColumnId = (id: string) => id.startsWith("temp_");
+
+  // Buffer pending cell edits for temp columns: { [tempColId]: Map<rowId,value> }
+  const pendingTempEditsRef = useRef<Record<string, Map<string, string>>>({});
+
+  // Buffer pending header rename for temp columns: { [tempColId]: name }
+  const pendingTempRenameRef = useRef<Record<string, string>>({});
+
+  // Stable column key mapping to prevent React unmount/remount during temp->real swap
+  const stableColKeyRef = useRef(new Map<string, string>());
+
+  // Helper to get stable key for a column (temp or real)
+  const getStableColKey = (id: string) => {
+    return stableColKeyRef.current.get(id) ?? id;
+  };
+
+  // Batch helper to prevent intermediate renders
+  const batch = (fn: () => void) => notifyManager.batch(fn);
 
   // Wait for contexts to be hydrated before enabling queries
   const hasView = !!currentViewId;
@@ -268,6 +291,38 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
     }),
     [tableId, currentViewId, sortRules, filterRules]
   );
+
+  // Cache patcher for updating all cached pages
+  const tableInputs = useMemo(() => {
+    const base = {
+      tableId,
+      viewId: currentViewId ?? undefined,
+      searchTerm: searchTerm || undefined,
+      sortRules: sortRules.length ? sortRules.map(r => ({ columnId: r.columnId, direction: r.direction })) : undefined,
+      filterRules: filterRules.length ? filterRules.map(r => ({ columnId: r.columnId, operator: r.operator as any, value: r.value, logicalOperator: r.logicalOperator })) : undefined,
+    };
+    const inputs: Array<any> = [
+      { ...base, page: 0, pageSize: 1 },                         // count probe
+      { ...base, page: Math.max(0, safeStartPage - 1), pageSize: PAGE_SIZE },
+      { ...base, page: safeStartPage, pageSize: PAGE_SIZE },
+    ];
+    if (needMidPage) inputs.push({ ...base, page: midPage, pageSize: PAGE_SIZE });
+    if (needEndPage) inputs.push({ ...base, page: safeEndPage, pageSize: PAGE_SIZE });
+    return inputs;
+  }, [
+    tableId, currentViewId, searchTerm,
+    JSON.stringify(sortRules), JSON.stringify(filterRules),
+    safeStartPage, needMidPage, midPage, needEndPage, safeEndPage
+  ]);
+
+  const patchEachCachedPage = (mutator: (data: any) => any) => {
+    tableInputs.forEach(input => {
+      const data = utils.table.getTableDataPaginated.getData(input);
+      if (!data) return;
+      const next = mutator(data);
+      if (next) utils.table.getTableDataPaginated.setData(input, next);
+    });
+  };
   const prevSigRef = useRef(sortFilterSig);
   useEffect(() => {
     if (prevSigRef.current !== sortFilterSig) {
@@ -523,19 +578,162 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
   });
 
   const addColumnMutation = api.table.addColumn.useMutation({
-    onSuccess: () => {
-      // Invalidate cache after adding column
-      void utils.table.getTableDataPaginated.invalidate();
-      // Close dropdown and reset state
+    // Create phantom column immediately
+    onMutate: async ({ tableId, name, type }) => {
+      const tempId = makeTempColumnId();
+      pendingTempEditsRef.current[tempId] = new Map();
+
+      // Set stable key for the temp column
+      stableColKeyRef.current.set(tempId, tempId);
+
+      await utils.table.getTableDataPaginated.cancel(); // avoid races
+
+      patchEachCachedPage((data) => {
+        if (!data?.table) return data;
+        const already = data.table.columns.some((c: any) => c.id === tempId);
+        if (already) return data;
+
+        // Calculate the next column number for default naming
+        const existingColumns = data.table.columns || [];
+        const nextColumnNumber = existingColumns.length + 1;
+        
+        const optimisticCol = {
+          id: tempId,
+          name: (name?.trim() || `Column ${nextColumnNumber}`),
+          type: type || "text",
+        };
+        return {
+          ...data,
+          table: { ...data.table, columns: [...data.table.columns, optimisticCol] },
+        };
+      });
+
+      // close UI
       setShowNewColumnDropdown(false);
-      setNewColumnName('');
+      setNewColumnName("");
       setNewColumnType(null);
+
+      return { tempId };
+    },
+
+    // Server returns the real column once fully created
+    onSuccess: (realCol, _vars, ctx) => {
+      const tempId = ctx?.tempId;
+      if (!tempId) return;
+
+      const stableKey = stableColKeyRef.current.get(tempId) ?? tempId;
+      
+      // Point the real id at the same stable key to prevent React unmount/remount
+      stableColKeyRef.current.set(realCol.id, stableKey);
+
+      batch(() => {
+        // 1) swap temp -> real id in-place across cached pages
+        patchEachCachedPage((data) => {
+          if (!data?.table) return data;
+          const idx = data.table.columns.findIndex((c: any) => c.id === tempId);
+          if (idx === -1) return data;
+
+          const nextCols = [...data.table.columns];
+          nextCols[idx] = { ...nextCols[idx], ...realCol, id: realCol.id };
+          return { ...data, table: { ...data.table, columns: nextCols } };
+        });
+
+        // 2) migrate localColumnNames[tempId] -> [realCol.id]
+        setLocalColumnNames((prev) => {
+          if (!(tempId in prev)) return prev;
+          const { [tempId]: old, ...rest } = prev;
+          const result: Record<string, string> = { ...rest };
+          if (old) {
+            result[realCol.id] = old;
+          }
+          return result;
+        });
+
+        // 3) flush buffered cell edits for the temp column to the real column id
+        const buffered = pendingTempEditsRef.current[tempId];
+        if (buffered && buffered.size) {
+          buffered.forEach((value, rowId) => {
+            // move overlay so UI stays identical
+            setLocalCellValues(prev => {
+              const oldKey = `${rowId}-${tempId}`;
+              const val = prev[oldKey];
+              if (val === undefined) return prev;
+              const { [oldKey]: _, ...rest } = prev;
+              return { ...rest, [`${rowId}-${realCol.id}`]: val };
+            });
+
+            // send to server (you can batch if you have a bulk endpoint)
+            commitCell(rowId, realCol.id, value);
+          });
+          delete pendingTempEditsRef.current[tempId];
+        }
+
+        // 4) keep UI focus/selection continuous if user was interacting
+        setEditingColumn(ec => ec && ec.columnId === tempId ? { ...ec, columnId: realCol.id } : ec);
+        setSelectedColumn(sc => sc === tempId ? realCol.id : sc);
+        setSelectedCell(sc => sc && sc.columnId === tempId ? { ...sc, columnId: realCol.id } : sc);
+
+        // 5) apply a queued rename that happened while temp
+        const pendingName = pendingTempRenameRef.current[tempId];
+        if (pendingName && pendingName.trim() && pendingName.trim() !== realCol.name) {
+          // send rename on the real id without causing an extra paint
+          void updateColumnMutation.mutate({ columnId: realCol.id, name: pendingName.trim() });
+          delete pendingTempRenameRef.current[tempId];
+        }
+      });
+
+      // DO NOT invalidate immediately — we updated cache in place (no flicker).
+      // Optionally: background verify later if you like.
+    },
+
+    onError: (_err, _vars, ctx) => {
+      const tempId = ctx?.tempId;
+      if (!tempId) return;
+
+      // remove phantom column
+      patchEachCachedPage((data) => {
+        if (!data?.table) return data;
+        if (!data.table.columns.some((c: any) => c.id === tempId)) return data;
+        return {
+          ...data,
+          table: { ...data.table, columns: data.table.columns.filter((c: any) => c.id !== tempId) },
+        };
+      });
+
+      // clean up stable key mapping
+      stableColKeyRef.current.delete(tempId);
+      delete pendingTempEditsRef.current[tempId];
+      delete pendingTempRenameRef.current[tempId];
+      // (Optional) toast error
     },
   });
 
   const deleteColumnMutation = api.table.deleteColumn.useMutation({
     onMutate: async ({ columnId }) => {
-      // Optimistically update the table schema to remove the column
+      // Check if this is a temporary column
+      if (isTempColumnId(columnId)) {
+        // For temporary columns, just remove from UI and clear buffers
+        patchEachCachedPage((data) => {
+          if (!data?.table) return data;
+          if (!data.table.columns.some((c: any) => c.id === columnId)) return data;
+          return {
+            ...data,
+            table: { ...data.table, columns: data.table.columns.filter((c: any) => c.id !== columnId) },
+          };
+        });
+
+        // Clear any buffered edits and renames for this temp column
+        stableColKeyRef.current.delete(columnId);
+        delete pendingTempEditsRef.current[columnId];
+        delete pendingTempRenameRef.current[columnId];
+
+        // Cancel the addColumn mutation if it's still pending
+        addColumnMutation.reset();
+
+        return { isTempColumn: true };
+      }
+
+      // For real columns, use the existing optimistic update logic
       const currentData = utils.table.getTableDataPaginated.getData({ 
         tableId,
         viewId: currentViewId ?? undefined,
@@ -579,10 +777,15 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
           table: updatedTable
         });
       }
+
+      return { isTempColumn: false };
     },
-    onSettled: () => {
-      // Invalidate cache after mutation
-      void utils.table.getTableDataPaginated.invalidate();
+    onSettled: (data, error, variables) => {
+      // Only invalidate cache for real columns
+      // Check if the column being deleted is a temp column
+      if (variables && !isTempColumnId(variables.columnId)) {
+        void utils.table.getTableDataPaginated.invalidate();
+      }
     },
   });
 
@@ -647,6 +850,37 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
       void utils.table.getTableDataPaginated.invalidate({ tableId, viewId: currentViewId ?? undefined });
     },
   });
+
+  // Commit cell changes through a small helper
+  const commitCell = (rowId: string, columnId: string, value: string) => {
+    // always update UI overlay instantly
+    const key = `${rowId}-${columnId}`;
+    setLocalCellValues((prev) => ({ ...prev, [key]: value }));
+
+    if (isTempColumnId(columnId)) {
+      // buffer until real id exists
+      const bucket = pendingTempEditsRef.current[columnId] ?? new Map<string, string>();
+      bucket.set(rowId, value);
+      pendingTempEditsRef.current[columnId] = bucket;
+      return; // no server call yet
+    }
+
+    // real column -> send now
+    void updateCellMutation.mutate({ tableId, rowId, columnId, value });
+  };
+
+  // Commit header rename through a helper
+  const commitColumnRename = (columnId: string, name: string) => {
+    const next = name.trim();
+    setLocalColumnNames(prev => ({ ...prev, [columnId]: next }));
+
+    if (isTempColumnId(columnId)) {
+      pendingTempRenameRef.current[columnId] = next;
+      return; // wait until swap to real id
+    }
+
+    void updateColumnMutation.mutate({ columnId, name: next });
+  };
 
   // Handle row reordering
   const handleMoveRow = useCallback((rowId: string, direction: 'up' | 'down') => {
@@ -800,12 +1034,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
           const cellKey = `${editingCell.rowId}-${editingCell.columnId}`;
           setLocalCellValues(prev => ({ ...prev, [cellKey]: formattedValue }));
           
-          void updateCellMutation.mutate({
-            tableId,
-            rowId: editingCell.rowId,
-            columnId: editingCell.columnId,
-            value: formattedValue,
-          });
+          commitCell(editingCell.rowId, editingCell.columnId, formattedValue);
           setEditingCell(null);
           
           // Move to next cell (same as Tab navigation logic)
@@ -1001,6 +1230,8 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
   // Helper function to check if a column is the primary field
   // For now, we'll consider the first column as primary
   const isPrimaryField = useCallback((columnId: string) => {
+    // Temporary columns can always be deleted
+    if (isTempColumnId(columnId)) return false;
     return tableMeta?.columns.find(col => col.id === columnId) === tableMeta?.columns[0];
   }, [tableMeta]);
 
@@ -1143,20 +1374,14 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                  }}
                  onBlur={() => {
                    if (editingColumn) {
-                     void updateColumnMutation.mutate({
-                       columnId: editingColumn.columnId,
-                       name: editingColumn.name
-                     });
+                     commitColumnRename(editingColumn.columnId, editingColumn.name);
                      setEditingColumn(null);
                    }
                  }}
                  onKeyDown={(e) => {
                    if (e.key === "Enter") {
                      if (editingColumn) {
-                       void updateColumnMutation.mutate({
-                         columnId: editingColumn.columnId,
-                         name: editingColumn.name
-                       });
+                       commitColumnRename(editingColumn.columnId, editingColumn.name);
                        setEditingColumn(null);
                      }
                    } else if (e.key === "Escape") {
@@ -1259,12 +1484,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                              const cellKey = `${editingCell.rowId}-${editingCell.columnId}`;
                              setLocalCellValues(prev => ({ ...prev, [cellKey]: formattedValue }));
                              
-                             void updateCellMutation.mutate({
-                               tableId,
-                               rowId: editingCell.rowId,
-                               columnId: editingCell.columnId,
-                               value: formattedValue,
-                             });
+                             commitCell(editingCell.rowId, editingCell.columnId, formattedValue);
                              setEditingCell(null);
                              
                              // Move selection to the row below (same column)
@@ -1304,12 +1524,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                          const cellKey = `${editingCell.rowId}-${editingCell.columnId}`;
                          setLocalCellValues(prev => ({ ...prev, [cellKey]: formattedValue }));
                          
-                         void updateCellMutation.mutate({
-                           tableId,
-                           rowId: editingCell.rowId,
-                           columnId: editingCell.columnId,
-                           value: formattedValue,
-                         });
+                         commitCell(editingCell.rowId, editingCell.columnId, formattedValue);
                          setEditingCell(null);
                          
                          // Move selection to the row below (same column)
@@ -1338,12 +1553,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                        const cellKey = `${editingCell.rowId}-${editingCell.columnId}`;
                        setLocalCellValues(prev => ({ ...prev, [cellKey]: formattedValue }));
                        
-                       void updateCellMutation.mutate({
-                         tableId,
-                         rowId: editingCell.rowId,
-                         columnId: editingCell.columnId,
-                         value: formattedValue,
-                       });
+                       commitCell(editingCell.rowId, editingCell.columnId, formattedValue);
                        setEditingCell(null);
                        setSelectedCell({ rowId: editingCell.rowId, columnId: editingCell.columnId });
                      }
@@ -1490,7 +1700,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
             .filter(column => !isFieldHidden(column.id))
             .map((column, index) => (
               <div 
-                key={column.id}
+                key={getStableColKey(column.id)}
                 data-field-id={column.id}
                 className={`border-t border-b border-r border-gray-200 h-9 px-2 py-1 flex items-center cursor-pointer select-none ${
                   isColumnSelected(column.id) ? 'bg-blue-100' : ''
@@ -1530,20 +1740,14 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                     }}
                     onBlur={() => {
                       if (editingColumn) {
-                        void updateColumnMutation.mutate({
-                          columnId: editingColumn.columnId,
-                          name: editingColumn.name
-                        });
+                        commitColumnRename(editingColumn.columnId, editingColumn.name);
                         setEditingColumn(null);
                       }
                     }}
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
                         if (editingColumn) {
-                          void updateColumnMutation.mutate({
-                            columnId: editingColumn.columnId,
-                            name: editingColumn.name
-                          });
+                          commitColumnRename(editingColumn.columnId, editingColumn.name);
                           setEditingColumn(null);
                         }
                       } else if (e.key === "Escape") {
@@ -1745,7 +1949,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                          
                          return (
                            <div 
-                             key={column.id}
+                             key={getStableColKey(column.id)}
                              data-row-id={row.id}
                              data-column-id={column.id}
                              className={`flex items-center ${isRowSelected(row.id) && !isSelected ? 'bg-gray-100' : ''}`}
@@ -1832,12 +2036,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                                            const cellKey = `${editingCell.rowId}-${editingCell.columnId}`;
                                            setLocalCellValues(prev => ({ ...prev, [cellKey]: formattedValue }));
                                            
-                                           void updateCellMutation.mutate({
-                                             tableId,
-                                             rowId: editingCell.rowId,
-                                             columnId: editingCell.columnId,
-                                             value: formattedValue,
-                                           });
+                                           commitCell(editingCell.rowId, editingCell.columnId, formattedValue);
                                            setEditingCell(null);
                                            
                                            // Move selection to the row below (same column)
@@ -1877,12 +2076,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                                        const cellKey = `${editingCell.rowId}-${editingCell.columnId}`;
                                        setLocalCellValues(prev => ({ ...prev, [cellKey]: formattedValue }));
                                        
-                                       void updateCellMutation.mutate({
-                                         tableId,
-                                         rowId: editingCell.rowId,
-                                         columnId: editingCell.columnId,
-                                         value: formattedValue,
-                                       });
+                                       commitCell(editingCell.rowId, editingCell.columnId, formattedValue);
                                        setEditingCell(null);
                                        
                                        // Move selection to the row below (same column)
@@ -1911,12 +2105,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                                      const cellKey = `${editingCell.rowId}-${editingCell.columnId}`;
                                      setLocalCellValues(prev => ({ ...prev, [cellKey]: formattedValue }));
                                      
-                                     void updateCellMutation.mutate({
-                                       tableId,
-                                       rowId: editingCell.rowId,
-                                       columnId: editingCell.columnId,
-                                       value: formattedValue,
-                                     });
+                                     commitCell(editingCell.rowId, editingCell.columnId, formattedValue);
                                      setEditingCell(null);
                                      setSelectedCell({ rowId: editingCell.rowId, columnId: editingCell.columnId });
                                    }
