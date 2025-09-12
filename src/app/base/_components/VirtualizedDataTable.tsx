@@ -1182,6 +1182,11 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
            const isEditing = editingCell?.rowId === cellData.rowId && editingCell?.columnId === cellData.columnId;
            const isSelected = selectedCell?.rowId === cellData.rowId && selectedCell?.columnId === cellData.columnId;
 
+           const displayedValue = (localCellValues[`${cellData.rowId}-${cellData.columnId}`] ?? cellData.value) ?? '';
+           const trimmedSearch = (searchTerm ?? '').trim();
+           const matchesSearch = trimmedSearch
+             ? String(displayedValue).toLowerCase().includes(trimmedSearch.toLowerCase())
+             : false;
            
            return (
              <div 
@@ -1192,6 +1197,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                } ${
                  isColumnSelected(cellData.columnId) && !isSelected ? 'bg-blue-50' : ''
                }`}
+               style={!isSelected && matchesSearch ? { backgroundColor: '#fff3d3' } : undefined}
                onClick={(e) => {
                  if (isEditing) {
                    // Let the input handle clicks — do not re-select or reset editing
@@ -1370,7 +1376,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
 
     // Return row number column + data columns
     return [rowNumberColumn, ...dataColumns];
-  }, [tableData, editingColumn, editingCell, updateColumnMutation, updateCellMutation, tableId, localCellValues, localColumnNames, isFieldHidden]);
+  }, [tableData, editingColumn, editingCell, updateColumnMutation, updateCellMutation, tableId, localCellValues, localColumnNames, isFieldHidden, searchTerm]);
 
   const table = useReactTable({
     data: tableRows,
@@ -1733,6 +1739,10 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                          const isEditing = editingCell?.rowId === row.id && editingCell?.columnId === column.id;
                          const isSelected = selectedCell?.rowId === row.id && selectedCell?.columnId === column.id;
                          
+                         const displayedValue = (localCellValues[`${row.id}-${column.id}`] ?? cellValue) ?? '';
+                         const trimmedSearch = (searchTerm ?? '').trim();
+                         const matchesSearch = trimmedSearch ? String(displayedValue).toLowerCase().includes(trimmedSearch.toLowerCase()) : false;
+                         
                          return (
                            <div 
                              key={column.id}
@@ -1752,6 +1762,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                                } ${
                                  isColumnSelected(column.id) && !isSelected ? 'bg-blue-50' : ''
                                }`}
+                               style={!isSelected && matchesSearch ? { backgroundColor: '#fff3d3' } : undefined}
                                onClick={(e) => {
                                  if (isEditing) {
                                    // Let the input handle clicks — do not re-select or reset editing
@@ -1923,7 +1934,7 @@ export function VirtualizedDataTable({ tableId }: VirtualizedDataTableProps) {
                                />
                              ) : (
                                                                <div className="w-full h-full pointer-events-auto overflow-hidden text-ellipsis whitespace-nowrap flex items-center">
-                                  <span className="truncate block w-full" style={{ fontSize: '13px' }}>
+                                  <span className="truncate block w-full" style={{ fontSize: '13px', backgroundColor: !isSelected && matchesSearch ? '#fff3d3' : undefined }}>
                                     {localCellValues[`${row.id}-${column.id}`] ?? cellValue}
                                   </span>
                                 </div>
