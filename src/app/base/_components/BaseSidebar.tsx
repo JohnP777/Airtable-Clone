@@ -32,10 +32,33 @@ export function BaseSidebar() {
       aria-label="Base Sidebar"
     >
       {/* Home button */}
-      <div className="p-3">
-        <Link href="/" className="flex items-center justify-center w-8 h-8 rounded hover:bg-gray-100 transition-colors">
-          <Image src="/10.PNG" alt="Home" width={26} height={26} />
+      <div className="p-3 group relative">
+        <Link 
+          href="/" 
+          className="flex items-center justify-center w-8 h-8 rounded"
+          title="Back to home"
+        >
+          {/* Home icon - hidden on hover */}
+          <Image 
+            src="/10.PNG" 
+            alt="Home" 
+            width={26} 
+            height={26} 
+            className="group-hover:hidden"
+          />
+          {/* Left arrow icon - shown on hover */}
+          <Image 
+            src="/25.PNG" 
+            alt="Back to home" 
+            width={26} 
+            height={26} 
+            className="hidden group-hover:block"
+          />
         </Link>
+        {/* Tooltip */}
+        <div className="absolute left-full ml-2 top-1/2 transform -translate-y-1/2 bg-black text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
+          Back to home
+        </div>
       </div>
       
       {/* Second button below home button */}
