@@ -218,6 +218,14 @@ export function FilterSortButtons() {
 
   // Helper function to get filter button text and styling
   const getFilterButtonState = () => {
+    // Show "Filtering..." state when actively filtering
+    if (isFiltering) {
+      return {
+        text: 'Filtering...',
+        className: 'flex items-center space-x-1 px-3 py-1 text-xs text-gray-500 bg-gray-100 rounded disabled:opacity-50 disabled:cursor-not-allowed'
+      };
+    }
+
     // Only show "Filtered by X" if there are filter rules with actual values
     const activeFilterRules = filterRules.filter(rule => {
       // Filter out rules with empty values (unless they're "is empty" or "is not empty" operators)
