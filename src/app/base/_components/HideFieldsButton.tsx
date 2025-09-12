@@ -31,13 +31,13 @@ export function HideFieldsButton({ tableId }: HideFieldsButtonProps) {
     { enabled: !!tableId }
   );
 
-  // Filter fields based on search term
-  const filteredFields = tableData?.table?.columns?.filter(column => 
-    column.name.toLowerCase().includes(searchTerm.toLowerCase())
-  ) ?? [];
+  // Get all fields except the primary field (first column) first
+  const allFieldsExceptPrimary = tableData?.table?.columns?.slice(1) ?? [];
 
-  // Get all fields except the primary field (first column)
-  const fieldsToShow = filteredFields.slice(1); // Skip the first column (primary field)
+  // Filter fields based on search term
+  const fieldsToShow = allFieldsExceptPrimary.filter(column => 
+    column.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   const handleFieldToggle = (columnId: string) => {
     toggleFieldHidden(columnId);
