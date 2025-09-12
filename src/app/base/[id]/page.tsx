@@ -16,8 +16,8 @@ import { FilterSortButtons } from "../_components/FilterSortButtons";
 import { ViewsSidebarToggleButton } from "../_components/ViewsSidebarToggleButton";
 import { ViewSidebarVisibilityProvider } from "../_components/ViewSidebarVisibilityContext";
 
-export default async function BasePage({ params }: { params: { id: string } }) {
-  const { id } = params;
+export default async function BasePage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const session = await auth();
   if (!session?.user) { redirect("/"); }
 
