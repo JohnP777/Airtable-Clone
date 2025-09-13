@@ -33,7 +33,7 @@ function generateFakeBusinessData() {
   };
 }
 
-// Function to generate fake data for existing columns
+// Function to generate fake data for existing columns when adding bulk rows
 function generateFakeDataForColumns(columns: Array<{ id: string; name: string }>, rowCount: number) {
   return Array.from({ length: rowCount }, (_, index) => ({
     order: index,
@@ -91,6 +91,7 @@ function generateFakeDataForColumns(columns: Array<{ id: string; name: string }>
 }
 
 export const tableRouter = createTRPCRouter({
+  // Returns list of tables, with their ids, names and order, given a base ID and base
   list: protectedProcedure
     .input(z.object({ baseId: z.string() }))
     .query(async ({ ctx, input }) => {
@@ -104,6 +105,7 @@ export const tableRouter = createTRPCRouter({
       });
     }),
 
+  // Returns list of views, with their viewID, view name, type and order, given a tableId and table
   listViews: protectedProcedure
     .input(z.object({ tableId: z.string() }))
     .query(async ({ ctx, input }) => {
@@ -117,6 +119,7 @@ export const tableRouter = createTRPCRouter({
       });
     }),
 
+  // Creates a new view given a tableId and an optional name
   createView: protectedProcedure
     .input(z.object({ tableId: z.string(), name: z.string().optional() }))
     .mutation(async ({ ctx, input }) => {
@@ -140,6 +143,7 @@ export const tableRouter = createTRPCRouter({
       return view;
     }),
 
+  // Renames a view given a viewId and a new name
   renameView: protectedProcedure
     .input(z.object({ viewId: z.string(), newName: z.string().min(1).max(100) }))
     .mutation(async ({ ctx, input }) => {
@@ -160,10 +164,11 @@ export const tableRouter = createTRPCRouter({
       return updatedView;
     }),
 
+  // Deletes a view given a viewId
   deleteView: protectedProcedure
     .input(z.object({ viewId: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      // verify access
+      // Verify access (view belongs to a table whose base was created by the current user)
       const view = await ctx.db.view.findFirst({
         where: { 
           id: input.viewId, 
@@ -185,6 +190,7 @@ export const tableRouter = createTRPCRouter({
       return { success: true };
     }),
 
+  // Duplicates a view given its viewId, copies over sort/filter/hidden fields rules
   duplicateView: protectedProcedure
     .input(z.object({ viewId: z.string() }))
     .mutation(async ({ ctx, input }) => {
@@ -202,9 +208,10 @@ export const tableRouter = createTRPCRouter({
       });
       if (!originalView) throw new Error("View not found");
 
+      // To get order/position of new view in table
       const count = await ctx.db.view.count({ where: { tableId: originalView.tableId } });
       
-      // Create new view
+      // Create new view 
       const newView = await ctx.db.view.create({
         data: {
           tableId: originalView.tableId,
@@ -216,7 +223,7 @@ export const tableRouter = createTRPCRouter({
         select: { id: true, name: true, type: true, order: true }
       });
 
-      // Copy sort rules
+      // Copy over sort rules (creates new viewSortRules with same fields but changes the viewId)
       if (originalView.sortRules.length > 0) {
         await ctx.db.viewSortRule.createMany({
           data: originalView.sortRules.map(rule => ({
@@ -228,7 +235,7 @@ export const tableRouter = createTRPCRouter({
         });
       }
 
-      // Copy filter rules
+      // Copy over filter rules
       if (originalView.filterRules.length > 0) {
         await ctx.db.viewFilterRule.createMany({
           data: originalView.filterRules.map(rule => ({
@@ -236,7 +243,7 @@ export const tableRouter = createTRPCRouter({
             columnId: rule.columnId,
             operator: rule.operator,
             value: rule.value,
-            logicalOperator: (rule as any).logicalOperator, // Copy the logical operator
+            logicalOperator: (rule as any).logicalOperator, 
             order: rule.order
           }))
         });
@@ -245,23 +252,6 @@ export const tableRouter = createTRPCRouter({
       return newView;
     }),
 
-  getView: protectedProcedure
-    .input(z.object({ viewId: z.string(), tableId: z.string() }))
-    .query(async ({ ctx, input }) => {
-      const view = await ctx.db.view.findFirst({
-        where: {
-          id: input.viewId,
-          tableId: input.tableId,
-          table: { base: { createdById: ctx.session.user.id } },
-        },
-        include: {
-          sortRules: { orderBy: { order: "asc" } },
-          filterRules: { orderBy: { order: "asc" } },
-        },
-      });
-      if (!view) throw new Error("View not found");
-      return view;
-    }),
 
   // Get persisted state for a view (for hydrating contexts)
   getViewState: protectedProcedure
@@ -275,6 +265,7 @@ export const tableRouter = createTRPCRouter({
         });
       }
 
+      // Finds the view based on unique viewId
       const view = await ctx.db.view.findUnique({
         where: { id: input.viewId },
         include: {
@@ -284,6 +275,7 @@ export const tableRouter = createTRPCRouter({
       });
       if (!view) throw new TRPCError({ code: "NOT_FOUND" });
 
+      // Returns hidden fields/sort rules/filter rules of a view from backend
       return {
         hiddenFields: view.hiddenFields ?? [],
         sortRules: view.sortRules.map(r => ({ columnId: r.columnId, direction: r.direction as "asc"|"desc" })),
@@ -311,10 +303,11 @@ export const tableRouter = createTRPCRouter({
     }))
     .mutation(async ({ ctx, input }) => {
       await ctx.db.$transaction([
+        // Deletes existing rules and creates new rules (frontend will reprovide all the rules including existing ones)
         ctx.db.viewFilterRule.deleteMany({ where: { viewId: input.viewId } }),
         ctx.db.viewFilterRule.createMany({
           data: input.rules.map((r, i) => ({
-            viewId: input.viewId,
+            viewId: input.viewId, //Attaches input viewId to viewFilterRule objects
             columnId: r.columnId,
             operator: r.operator,
             value: r.value,
@@ -322,6 +315,7 @@ export const tableRouter = createTRPCRouter({
             order: i,
           })),
         }),
+        // Updates view 'updatedAt' time
         ctx.db.view.update({ where: { id: input.viewId }, data: { updatedAt: new Date() } }),
       ]);
       return { ok: true };
@@ -337,6 +331,7 @@ export const tableRouter = createTRPCRouter({
     }))
     .mutation(async ({ ctx, input }) => {
       await ctx.db.$transaction([
+        // Deletes existing rules and creates new rules
         ctx.db.viewSortRule.deleteMany({ where: { viewId: input.viewId } }),
         ctx.db.viewSortRule.createMany({
           data: input.sortRules.map((r, i) => ({
@@ -346,6 +341,7 @@ export const tableRouter = createTRPCRouter({
             order: i,
           })),
         }),
+        // Updates 'updatedAt' time
         ctx.db.view.update({ where: { id: input.viewId }, data: { updatedAt: new Date() } }),
       ]);
       return { ok: true };
@@ -362,6 +358,7 @@ export const tableRouter = createTRPCRouter({
       return { ok: true };
     }),
 
+  // Creates a new table in a base with fake data
   createTable: protectedProcedure
     .input(z.object({ 
       baseId: z.string(),
@@ -380,6 +377,7 @@ export const tableRouter = createTRPCRouter({
         throw new Error("Base not found");
       }
 
+      // To determine order of new table
       const tableCount = await ctx.db.table.count({ 
         where: { baseId: input.baseId } 
       });
@@ -423,6 +421,7 @@ export const tableRouter = createTRPCRouter({
           const tableColumn = table.columns[colIndex];
           if (!tableColumn) continue;
           
+          // Add fake data into cellData array
           cellData.push({
             tableId: table.id,
             rowId: tableRow.id,
@@ -440,6 +439,84 @@ export const tableRouter = createTRPCRouter({
       }
 
       return table;
+    }),
+
+  // Deletes a table, given its tableId
+  deleteTable: protectedProcedure
+    .input(z.object({ 
+      tableId: z.string()
+    }))
+    .mutation(async ({ ctx, input }) => {
+      // Verify user owns the table
+      const table = await ctx.db.table.findFirst({
+        where: {
+          id: input.tableId,
+          base: {
+            createdById: ctx.session.user.id
+          }
+        }
+      });
+
+      if (!table) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Table not found or you don't have permission to delete it"
+        });
+      }
+
+      // Check if this is the last table in the base
+      const tableCount = await ctx.db.table.count({
+        where: {
+          baseId: table.baseId
+        }
+      });
+
+      if (tableCount <= 1) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Cannot delete the last remaining table in the base"
+        });
+      }
+
+      // Delete the table (cascade will handle related data)
+      await ctx.db.table.delete({
+        where: { id: input.tableId }
+      });
+
+      return { success: true };
+    }),
+
+  // Renames a table, given a tableId and a new name
+  renameTable: protectedProcedure
+    .input(z.object({ 
+      tableId: z.string(),
+      newName: z.string().min(1).max(100)
+    }))
+    .mutation(async ({ ctx, input }) => {
+      // Verify user owns the table
+      const table = await ctx.db.table.findFirst({
+        where: {
+          id: input.tableId,
+          base: {
+            createdById: ctx.session.user.id
+          }
+        }
+      });
+
+      if (!table) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Table not found or you don't have permission to rename it"
+        });
+      }
+
+      // Update the table name
+      const updatedTable = await ctx.db.table.update({
+        where: { id: input.tableId },
+        data: { name: input.newName }
+      });
+
+      return { success: true, table: updatedTable };
     }),
 
   updateCell: protectedProcedure
@@ -486,6 +563,7 @@ export const tableRouter = createTRPCRouter({
         throw new Error("Column not found");
       }
 
+      // Update cell or create one if it doesn't exist (just adding some extra defensive programming here)
       const cell = await ctx.db.tableCell.upsert({
         where: {
           tableId_rowId_columnId: {
@@ -506,6 +584,7 @@ export const tableRouter = createTRPCRouter({
       return cell;
     }),
 
+  // Updates a column name
   updateColumn: protectedProcedure
     .input(z.object({
       columnId: z.string(),
@@ -532,6 +611,7 @@ export const tableRouter = createTRPCRouter({
       return updatedColumn;
     }),
 
+  // Adds a new singular row to a table 
   addRow: protectedProcedure
     .input(z.object({ tableId: z.string() }))
     .mutation(async ({ ctx, input }) => {
@@ -555,6 +635,7 @@ export const tableRouter = createTRPCRouter({
         select: { order: true }
       });
       
+      // Next available row (or order 0 if no rows exist)
       const nextOrder = (maxOrderRow?.order ?? -1) + 1;
 
       const row = await ctx.db.tableRow.create({
@@ -579,11 +660,12 @@ export const tableRouter = createTRPCRouter({
       return row;
     }),
 
+  // Adds a new column to a table 
   addColumn: protectedProcedure
     .input(z.object({ 
       tableId: z.string(),
       name: z.string().optional(), // Optional custom name
-      type: z.enum(['text', 'number']).default('text') // Column type with default
+      type: z.enum(['text', 'number']).default('text') // Column type is default text
     }))
     .mutation(async ({ ctx, input }) => {
       // Verify user owns the table
@@ -627,6 +709,7 @@ export const tableRouter = createTRPCRouter({
       return column;
     }),
 
+  // Deletes a column
   deleteColumn: protectedProcedure
     .input(z.object({ 
       tableId: z.string(),
@@ -691,6 +774,41 @@ export const tableRouter = createTRPCRouter({
       return { success: true };
     }),
 
+  // Delete row mutation
+  deleteRow: protectedProcedure
+    .input(z.object({ 
+      tableId: z.string(),
+      rowId: z.string()
+    }))
+    .mutation(async ({ ctx, input }) => {
+      // Verify user owns the table
+      const table = await ctx.db.table.findFirst({
+        where: {
+          id: input.tableId,
+          base: {
+            createdById: ctx.session.user.id
+          }
+        }
+      });
+
+      if (!table) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Table not found or you don't have permission to delete rows"
+        });
+      }
+
+      // Delete the row (cascade will handle related cells)
+      await ctx.db.tableRow.delete({
+        where: {
+          id: input.rowId,
+          tableId: input.tableId
+        }
+      });
+
+      return { success: true };
+    }),
+    
   // Reorder two rows within a view by swapping their positions
   reorderRows: protectedProcedure
     .input(z.object({
@@ -784,16 +902,14 @@ export const tableRouter = createTRPCRouter({
       
       const startOrder = (maxOrderRow?.order ?? -1) + 1;
 
-      // Don't pre-generate all fake data - generate per batch to prevent memory issues
+      // Generate fake data per batch to prevent memory issues
       // const fakeData = generateFakeDataForColumns(table.columns, input.rowCount);
 
-      // Use much larger batches and concurrent processing for maximum performance
       const batchSize = BULK_OPERATION_CONFIG.BATCH_SIZE;
       const totalBatches = Math.ceil(input.rowCount / batchSize);
       let totalCreatedRows = 0;
 
       // Process batches with controlled concurrency to avoid overwhelming the database
-      // Note: Reduced batch size and concurrency to prevent transaction timeouts
       const processBatch = async (batchIndex: number) => {
         const startIndex = batchIndex * batchSize;
         const endIndex = Math.min(startIndex + batchSize, input.rowCount);
@@ -890,6 +1006,7 @@ export const tableRouter = createTRPCRouter({
       };
     }),
 
+  // Get paginated data for a table based on all conditions
   getTableDataPaginated: protectedProcedure
     .input(z.object({
       tableId: z.string(),
@@ -926,6 +1043,7 @@ export const tableRouter = createTRPCRouter({
       let effectiveSort = input.sortRules ?? [];
       let effectiveFilter = input.filterRules ?? [];
 
+      // If no inputted sorts/filters then fall back to the rules saved in the view
       if (input.viewId && (!effectiveSort.length || !effectiveFilter.length)) {
         let view = await ctx.db.view.findFirst({
           where: {
@@ -938,6 +1056,7 @@ export const tableRouter = createTRPCRouter({
             filterRules: { orderBy: { order: "asc" } }
           }
         });
+        // If can't find view then fall back to first available view for the table
         if (!view) {
           view = await ctx.db.view.findFirst({
             where: {
@@ -950,6 +1069,7 @@ export const tableRouter = createTRPCRouter({
             }
           });
         }
+        // Copy over sort/filter rules from view to effective sort/filter if they were empty
         if (view) {
           if (!effectiveSort.length && view.sortRules?.length) {
             effectiveSort = view.sortRules.map(r => ({ columnId: r.columnId, direction: r.direction as "asc" | "desc" }));
@@ -960,15 +1080,16 @@ export const tableRouter = createTRPCRouter({
         }
       }
 
-      const joins: Prisma.Sql[] = [];
-      const whereParts: Prisma.Sql[] = [Prisma.sql`tr."tableId" = ${input.tableId}`];
+      const joins: Prisma.Sql[] = []; //Array for raw SQL snippets
+      const whereParts: Prisma.Sql[] = [Prisma.sql`tr."tableId" = ${input.tableId}`]; //Array for all SQL queries 
+      // Initially, only rows which belong to the input tableId
 
-      // Add search functionality - search across all fields
+      // Search functionality - search across all fields
       if (input.searchTerm && input.searchTerm.trim()) {
         const searchTerm = input.searchTerm.trim().toLowerCase();
-        const searchLike = `%${searchTerm}%`;
+        const searchLike = `%${searchTerm}%`; // Matches if search term is any part of the word
         
-        // Create a subquery to find rows that have at least one cell containing the search term
+        // Subquery to find rows that have at least one cell containing the search term
         whereParts.push(Prisma.sql`tr.id IN (
           SELECT DISTINCT tc."rowId"
           FROM "TableCell" tc
@@ -994,15 +1115,15 @@ export const tableRouter = createTRPCRouter({
         if (validFilters.length === 0) {
           // No valid filters, don't apply any filtering
         } else {
-          // Build the filter conditions with proper AND/OR logic
+          // Building the filter conditions with and/or logic
           const conditions: Prisma.Sql[] = [];
           
           validFilters.forEach((f, idx) => {
-            const alias = Prisma.raw(`f${idx}`);
+            const alias = Prisma.raw(`f${idx}`); //alias = f0, f1 etc for unique join names
             joins.push(Prisma.sql`
               LEFT JOIN "TableCell" ${alias}
                 ON ${alias}."rowId" = tr.id AND ${alias}."columnId" = ${f.columnId}
-            `);
+            `); // For this filter, get the cell from the column the filter cares about for each row
             
             const v = (f.value ?? "").toLowerCase();
             const like = `%${v}%`;
@@ -1293,118 +1414,4 @@ export const tableRouter = createTRPCRouter({
         ...(searchResults && { searchResults })
       };
     }),
-
-
-  // Delete table mutation
-  deleteTable: protectedProcedure
-    .input(z.object({ 
-      tableId: z.string()
-    }))
-    .mutation(async ({ ctx, input }) => {
-      // Verify user owns the table
-      const table = await ctx.db.table.findFirst({
-        where: {
-          id: input.tableId,
-          base: {
-            createdById: ctx.session.user.id
-          }
-        }
-      });
-
-      if (!table) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Table not found or you don't have permission to delete it"
-        });
-      }
-
-      // Check if this is the last table in the base
-      const tableCount = await ctx.db.table.count({
-        where: {
-          baseId: table.baseId
-        }
-      });
-
-      if (tableCount <= 1) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "Cannot delete the last remaining table in the base"
-        });
-      }
-
-      // Delete the table (cascade will handle related data)
-      await ctx.db.table.delete({
-        where: { id: input.tableId }
-      });
-
-      return { success: true };
-    }),
-
-  // Rename table mutation
-  renameTable: protectedProcedure
-    .input(z.object({ 
-      tableId: z.string(),
-      newName: z.string().min(1).max(100)
-    }))
-    .mutation(async ({ ctx, input }) => {
-      // Verify user owns the table
-      const table = await ctx.db.table.findFirst({
-        where: {
-          id: input.tableId,
-          base: {
-            createdById: ctx.session.user.id
-          }
-        }
-      });
-
-      if (!table) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Table not found or you don't have permission to rename it"
-        });
-      }
-
-      // Update the table name
-      const updatedTable = await ctx.db.table.update({
-        where: { id: input.tableId },
-        data: { name: input.newName }
-      });
-
-      return { success: true, table: updatedTable };
-    }),
-
-  // Delete row mutation
-  deleteRow: protectedProcedure
-    .input(z.object({ 
-      tableId: z.string(),
-      rowId: z.string()
-    }))
-    .mutation(async ({ ctx, input }) => {
-      // Verify user owns the table
-      const table = await ctx.db.table.findFirst({
-        where: {
-          id: input.tableId,
-          base: {
-            createdById: ctx.session.user.id
-          }
-        }
-      });
-
-      if (!table) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Table not found or you don't have permission to delete rows"
-        });
-      }
-
-      // Delete the row (cascade will handle related cells)
-      await ctx.db.tableRow.delete({
-        where: {
-          id: input.rowId,
-          tableId: input.tableId
-        }
-      });
-
-      return { success: true };
-    })
 }); 

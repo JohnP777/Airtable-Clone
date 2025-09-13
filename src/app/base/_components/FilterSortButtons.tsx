@@ -19,7 +19,7 @@ interface FilterRule {
   columnId: string;
   operator: "contains" | "does not contain" | "is" | "is not" | "is empty" | "is not empty" | "equals" | "not equals" | "less than" | "greater than" | "less than or equal" | "greater than or equal";
   value: string;
-  logicalOperator?: "AND" | "OR" | null; // Added for And/Or functionality
+  logicalOperator?: "AND" | "OR" | null; 
 }
 
 export function FilterSortButtons() {
@@ -30,8 +30,7 @@ export function FilterSortButtons() {
   const [showSortDropdown, setShowSortDropdown] = useState(false);
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const [autoSortEnabled, setAutoSortEnabled] = useState(true);
-  const [showColumnSelect, setShowColumnSelect] = useState(false);
-  const [showAddSortColumnSelect, setShowAddSortColumnSelect] = useState(false);
+  const [showAddSortColumnSelect, setShowAddSortColumnSelect] = useState(false); //For secondary sorts and onwards
 
   const utils = api.useUtils();
 
@@ -45,7 +44,7 @@ export function FilterSortButtons() {
       sortRules: sortRules.length ? sortRules : undefined,
       filterRules: filterRules.length ? filterRules : undefined
     },
-    { enabled: !!selectedTableId }
+    { enabled: !!selectedTableId } //Run once selected table ID is defined
   );
 
   // Stable schema storage to prevent flicker during refetches
@@ -55,7 +54,7 @@ export function FilterSortButtons() {
       tableMetaRef.current = tableData.table;
     }
   }, [tableData]);
-  const tableMeta = tableMetaRef.current;
+  const tableMeta = tableMetaRef.current; // Use stable ref instead of live query data to prevent flickering
 
 
   const handleFilter = () => {
@@ -66,10 +65,10 @@ export function FilterSortButtons() {
   const handleSort = () => {
     setShowSortDropdown(!showSortDropdown);
     setShowFilterDropdown(false);
-    setShowColumnSelect(false);
     setShowAddSortColumnSelect(false);
   };
 
+  // Default new filter is first available column with 'contains' 
   const handleAddFilterRule = () => {
     const availableColumns = getAvailableFilterColumnsForNewRule();
     if (availableColumns.length > 0) {
@@ -80,16 +79,17 @@ export function FilterSortButtons() {
         logicalOperator: filterRules.length > 0 ? "AND" : undefined // Set AND for subsequent rules
       };
       setFilterRules([...filterRules, newRule]);
-      // Note: setFilterRules will handle the server mutation with optimistic updates
+      // setFilterRules will handle the server mutation with optimistic updates
     }
   };
 
+  // Remove a filter (pressing x button in filter dropdown)
   const handleRemoveFilterRule = (columnId: string) => {
     const newFilterRules = filterRules.filter(rule => rule.columnId !== columnId);
     setFilterRules(newFilterRules);
-    // Note: setFilterRules will handle the server mutation with optimistic updates
   };
 
+  // Updates one of the fields of a given filter rule
   const handleUpdateFilterRule = (columnId: string, field: keyof FilterRule, value: string) => {
     const newFilterRules = filterRules.map(rule => 
       rule.columnId === columnId 
@@ -98,9 +98,9 @@ export function FilterSortButtons() {
     );
     
     setFilterRules(newFilterRules);
-    // Note: setFilterRules will handle the server mutation with optimistic updates
   };
 
+  // Updates logical operator of a given filter rule
   const handleUpdateLogicalOperator = (columnId: string, logicalOperator: "AND" | "OR") => {
     const newFilterRules = filterRules.map(rule => 
       rule.columnId === columnId 
@@ -109,7 +109,6 @@ export function FilterSortButtons() {
     );
     
     setFilterRules(newFilterRules);
-    // Note: setFilterRules will handle the server mutation with optimistic updates
   };
 
   const handleAddSortRule = () => {
@@ -117,6 +116,7 @@ export function FilterSortButtons() {
     setShowAddSortColumnSelect(true);
   };
 
+  // Creates new sort rule when user chooses a column to sort by 
   const handleAddSortColumnSelect = (columnId: string) => {
     const newRule: SortRule = {
       columnId: columnId,
@@ -126,21 +126,24 @@ export function FilterSortButtons() {
     setShowAddSortColumnSelect(false);
   };
 
+  // Remove sort rule related to the column ID
   const handleRemoveSortRule = (columnId: string) => {
     const newSortRules = sortRules.filter(rule => rule.columnId !== columnId);
     setSortRules(newSortRules);
   };
 
+  // Updates a field of a sort rule
   const handleUpdateSortRule = (columnId: string, field: keyof SortRule, value: string) => {
     const newSortRules = sortRules.map(rule => 
       rule.columnId === columnId 
         ? { ...rule, [field]: value }
-        : rule
+        : rule //If columnId matches then update that rule's field value, otherwise return the rule unchanged (for all rules)
     );
     
     setSortRules(newSortRules);
   };
 
+  // Moves sort rule up 
   const handleMoveSortRuleUp = (columnId: string) => {
     const newSortRules = [...sortRules];
     const index = newSortRules.findIndex(rule => rule.columnId === columnId);
@@ -152,6 +155,7 @@ export function FilterSortButtons() {
     }
   };
 
+  // Moves sort rule down
   const handleMoveSortRuleDown = (columnId: string) => {
     const newSortRules = [...sortRules];
     const index = newSortRules.findIndex(rule => rule.columnId === columnId);
@@ -163,36 +167,22 @@ export function FilterSortButtons() {
     }
   };
 
-  const handleColumnSelect = (columnId: string) => {
-    const newRule: SortRule = {
-      columnId: columnId,
-      direction: "asc"
-    };
-    setSortRules([...sortRules, newRule]);
-    setShowColumnSelect(false);
-  };
-
-  const getColumnName = (columnId: string) => {
-    return tableMeta?.columns?.find((col: any) => col.id === columnId)?.name ?? "";
-  };
-
   // Get available columns for sort (excluding already selected ones)
-  const getAvailableColumns = () => {
+  const getAvailableSortColumnsForNewRule = () => {
     if (!tableMeta?.columns) return [];
     const selectedSortColumnIds = sortRules.map(rule => rule.columnId);
-    const selectedFilterColumnIds = filterRules.map(rule => rule.columnId);
-    const allSelectedColumnIds = [...selectedSortColumnIds, ...selectedFilterColumnIds];
-    return tableMeta.columns.filter((column: any) => !allSelectedColumnIds.includes(column.id));
+    return tableMeta.columns.filter((column: any) => !selectedSortColumnIds.includes(column.id));
   };
 
-  // Get available columns for adding new filter rules (only exclude other filter columns)
+  // Get available columns for adding new filter rules (excluding other already selected columns)
   const getAvailableFilterColumnsForNewRule = () => {
     if (!tableMeta?.columns) return [];
     const selectedFilterColumnIds = filterRules.map(rule => rule.columnId);
     return tableMeta.columns.filter((column: any) => !selectedFilterColumnIds.includes(column.id));
   };
 
-  // Get available columns for filter dropdown (excluding already selected filter columns, but allowing current rule's column)
+  // Get available columns for filter dropdown (excluding other already selected filter columns, but allowing current rule's column)
+  // For changing column of an existing filter
   const getAvailableFilterColumns = (currentRuleColumnId: string) => {
     if (!tableMeta?.columns) return [];
     const selectedFilterColumnIds = filterRules
@@ -201,7 +191,8 @@ export function FilterSortButtons() {
     return tableMeta.columns.filter((column: any) => !selectedFilterColumnIds.includes(column.id));
   };
 
-  // Get available columns for sort dropdown (excluding already selected sort columns, but allowing current rule's column)
+  // Get available columns for sort dropdown (excluding other already selected sort columns, but allowing current rule's column)
+  // For changing column of an existing sort
   const getAvailableSortColumns = (currentRuleColumnId: string) => {
     if (!tableMeta?.columns) return [];
     const selectedSortColumnIds = sortRules
@@ -213,12 +204,11 @@ export function FilterSortButtons() {
   // Apply sort when auto-sort toggle changes
   const handleAutoSortToggle = (enabled: boolean) => {
     setAutoSortEnabled(enabled);
-    // Note: The UI will update immediately via context, server will sync in background
   };
 
   // Helper function to get filter button text and styling
   const getFilterButtonState = () => {
-    // Show "Filtering..." state when actively filtering
+    // When actively filtering
     if (isFiltering) {
       return {
         text: 'Filtering...',
@@ -298,6 +288,7 @@ export function FilterSortButtons() {
       };
     }
     
+    // If sorts are applied, return 'Sorted by ...'
     if (sortRules.length > 0) {
       const text = sortRules.length === 1 
         ? 'Sorted by 1 field'
@@ -309,6 +300,7 @@ export function FilterSortButtons() {
       };
     }
     
+    // Standard sort button when no sorts are applied
     return {
       text: 'Sort',
       className: 'flex items-center space-x-1 px-3 py-1 text-xs text-gray-500 hover:bg-gray-50 rounded disabled:opacity-50 disabled:cursor-not-allowed'
@@ -388,7 +380,7 @@ export function FilterSortButtons() {
                           )}
                         </div>
                         
-                        {/* Column Dropdown - wider */}
+                        {/* Column Dropdown in current filters */}
                         <div className="relative flex-[2]">
                           <select
                             className="block w-full pl-3 pr-8 py-2 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 appearance-none truncate"
@@ -408,13 +400,14 @@ export function FilterSortButtons() {
                           </div>
                         </div>
 
-                        {/* Operator Dropdown - wider */}
+                        {/* Operator Dropdown */}
                         <div className="relative flex-[2]">
                           <select
                             className="block w-full pl-3 pr-8 py-2 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 appearance-none truncate"
                             value={rule.operator}
                             onChange={(e) => handleUpdateFilterRule(rule.columnId, "operator", e.target.value)}
                           >
+                            {/* Dropdown options based on column type */}
                             {getOperatorsForColumn(rule.columnId).map(operator => (
                               <option key={operator.value} value={operator.value}>
                                 {operator.label}
@@ -449,7 +442,7 @@ export function FilterSortButtons() {
                           </svg>
                         </button>
 
-                        {/* More options icon */}
+                        {/* More options icon (no functionality) */}
                         <div className="text-gray-400 p-1">
                           <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
                             <path d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"/>
@@ -477,11 +470,13 @@ export function FilterSortButtons() {
         )}
       </div>
       
+      {/* Group button (no functionality) */}
       <button className="flex items-center space-x-1 px-3 py-1 text-xs text-gray-500 hover:bg-gray-50 rounded -mr-2">
         <img src="/21.PNG" alt="Group" className="h-4 w-4" />
         <span className="font-normal" style={{ fontFamily: 'Mundo Sans Regular, sans-serif' }}>Group</span>
       </button>
       
+      {/* Sort button */}
       <div className="relative -mr-1">
         <button
           onClick={handleSort}
@@ -508,7 +503,7 @@ export function FilterSortButtons() {
                 {sortRules.length === 0 ? (
                   // Column selection view when no sorts exist
                   <div>
-                    {/* Search bar */}
+                    {/* Search bar (no functionality) */}
                     <div className="mb-3">
                       <div className="relative">
                         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -529,10 +524,10 @@ export function FilterSortButtons() {
                       {tableData?.table?.columns?.map((column) => (
                         <button
                           key={column.id}
-                          onClick={() => handleColumnSelect(column.id)}
+                          onClick={() => handleAddSortColumnSelect(column.id)}
                           className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-md flex items-center space-x-3"
                         >
-                          {/* Column icon - using first letter as placeholder */}
+                          {/* Column icon using first letter */}
                           <div className="w-6 h-6 bg-gray-100 rounded flex items-center justify-center text-xs font-medium text-gray-600">
                             {column.name.charAt(0).toUpperCase()}
                           </div>
@@ -547,7 +542,7 @@ export function FilterSortButtons() {
                     {/* Sort Rules */}
                     {sortRules.map((rule, index) => (
                       <div key={rule.columnId} className="flex items-center space-x-2 mb-3">
-                        {/* Column Dropdown - wider */}
+                        {/* Column Dropdown */}
                         <div className="relative flex-[2]">
                           <select
                             className="block w-full pl-3 pr-8 py-2 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 appearance-none"
@@ -568,7 +563,7 @@ export function FilterSortButtons() {
                           </div>
                         </div>
 
-                        {/* Direction Dropdown - narrower */}
+                        {/* Direction Dropdown */}
                         <div className="relative flex-1">
                           <select
                             className="block w-full pl-3 pr-8 py-2 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 appearance-none"
@@ -635,9 +630,9 @@ export function FilterSortButtons() {
                     {/* Add another sort button */}
                     <button 
                       onClick={handleAddSortRule}
-                      disabled={getAvailableColumns().length === 0}
+                      disabled={getAvailableSortColumnsForNewRule().length === 0}
                       className={`flex items-center text-sm mt-4 ${
-                        getAvailableColumns().length === 0 
+                        getAvailableSortColumnsForNewRule().length === 0 
                           ? 'text-gray-400 cursor-not-allowed' 
                           : 'text-gray-700 hover:text-gray-900'
                       }`}
@@ -664,7 +659,7 @@ export function FilterSortButtons() {
                               defaultValue=""
                             >
                               <option value="">Choose a column...</option>
-                              {getAvailableColumns().map((column: any) => (
+                              {getAvailableSortColumnsForNewRule().map((column: any) => (
                                 <option key={column.id} value={column.id}>
                                   {column.name}
                                 </option>
@@ -677,7 +672,7 @@ export function FilterSortButtons() {
                             </div>
                           </div>
                         </div>
-                        {getAvailableColumns().length === 0 && (
+                        {getAvailableSortColumnsForNewRule().length === 0 && (
                           <p className="text-sm text-gray-500 italic">All columns are already being used for sorting.</p>
                         )}
                       </div>
@@ -717,15 +712,18 @@ export function FilterSortButtons() {
         )}
       </div>
       
+      {/* Colour button (no functionality) */}
       <button className="flex items-center space-x-1 px-3 py-1 text-xs text-gray-500 hover:bg-gray-50 rounded -mr-1">
         <img src="/19.PNG" alt="Color" className="h-4 w-4" />
         <span className="font-normal" style={{ fontFamily: 'Mundo Sans Regular, sans-serif' }}>Color</span>
       </button>
       
+      {/* List and sort button (no functionality) */}
       <button className="flex items-center justify-center p-2 text-gray-500 hover:bg-gray-50 rounded -mr-0">
         <img src="/18.PNG" alt="List and sort" className="h-4 w-5" />
       </button>
       
+      {/* Share and sync button */}
       <button className="flex items-center space-x-1 px-3 py-1 text-xs text-gray-500 hover:bg-gray-50 rounded">
         <img src="/17.PNG" alt="Share and sync" className="h-4 w-5" />
         <span className="font-normal" style={{ fontFamily: 'Mundo Sans Regular, sans-serif' }}>Share and sync</span>

@@ -24,11 +24,11 @@ export function BaseContextMenu({ baseId, isOpen, onClose, position, onRename }:
         const updatedBases = currentData.filter(b => b.id !== id);
         utils.base.getRecent.setData({ limit: 10 }, updatedBases);
       }
+      onClose();
     },
     onSettled: (data) => {
       console.log("Base deleted successfully:", data);
       void utils.base.getRecent.invalidate();
-      onClose();
     },
   });
 
